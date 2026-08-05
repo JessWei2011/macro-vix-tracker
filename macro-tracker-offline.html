@@ -186,6 +186,15 @@
       color: var(--accent);
     }
 
+    .btn-success {
+      background-color: #00e676;
+      color: #000000;
+    }
+
+    .btn-success:hover {
+      background-color: #33ebd0;
+    }
+
     .btn-danger {
       background-color: #3a1c1c;
       color: #ff6b6b;
@@ -524,7 +533,7 @@
       background-color: rgba(255, 82, 82, 0.2);
     }
 
-    /* 5. 存檔區 / 備份區 */
+    /* 5. 存檔區 / Git 數據備份同步區 */
     .backup-card {
       background-color: var(--card-bg);
       border: 2px solid var(--card-border);
@@ -538,6 +547,15 @@
       align-items: center;
       flex-wrap: wrap;
       gap: 10px;
+    }
+
+    .file-sync-status {
+      font-size: 15px;
+      font-weight: 700;
+      color: #00e676;
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
 
     .edit-tip {
@@ -558,7 +576,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>📊 每日總經與波動率追蹤 DB <span>(Git 數據同步版)</span></h1>
+      <h1>📊 每日總經與波動率追蹤 DB <span>(無感自動存檔版)</span></h1>
       <div style="display: flex; gap: 12px; align-items: center;">
         <div class="status-msg" id="db-count">筆數: 0</div>
         <button class="btn btn-danger" id="clear-all-btn" title="清空全部資料">🗑️ 清空全部數據</button>
@@ -764,11 +782,14 @@
     <!-- 【區塊 5】：存檔區 / Git 數據備份同步區 -->
     <div class="backup-card">
       <div class="backup-header">
-        <div class="card-title" style="margin-bottom:0;">📁 Git 同步檔 (macro_data.json) 備份與管理</div>
+        <div>
+          <div class="card-title" style="margin-bottom:4px;">📁 Git 同步檔 (macro_data.json) 無感自動覆蓋</div>
+          <div class="file-sync-status" id="file-link-status">⚡ 尚未連結本地 macro_data.json（點右側按鈕連結 1 次即可無感自動存檔）</div>
+        </div>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <button class="btn btn-primary" id="download-file-btn">💾 下載覆蓋 macro_data.json</button>
+          <button class="btn btn-success" id="link-file-btn">🔗 綁定本機 macro_data.json (點一次永遠自動存)</button>
+          <button class="btn btn-secondary" id="download-file-btn">💾 手動下載 macro_data.json</button>
           <button class="btn btn-secondary" id="copy-json-btn">📋 複製 JSON</button>
-          <button class="btn btn-secondary" id="import-json-btn">📥 匯入 JSON</button>
         </div>
       </div>
     </div>
@@ -784,6 +805,8 @@
       n2_us10y: 4.65,
       n3_us10y: 4.85
     };
+
+    let fileHandle = null; // HTML5 File System Access API Handle
 
     function setTodayDate() {
       const today = new Date().toISOString().split('T')[0];
@@ -818,7 +841,6 @@
       render();
     }
 
-    // 優先讀取同目錄下的 macro_data.json，若無則讀取 localStorage
     async function loadData() {
       try {
         const response = await fetch('./macro_data.json?t=' + Date.now());
@@ -826,14 +848,12 @@
           const jsonFileData = await response.json();
           if (Array.isArray(jsonFileData) && jsonFileData.length > 0) {
             entries = jsonFileData;
-            saveData();
+            saveDataLocalOnly();
             render();
             return;
           }
         }
-      } catch (e) {
-        console.log('尚未找到本地 macro_data.json 或跨域直接開啟，改用 localStorage。');
-      }
+      } catch (e) {}
 
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
@@ -853,13 +873,49 @@
           { date: '2026-08-04', vixtwn: 38.92, vix: 15.86, oil: 85.13, us10y: 4.69, spread: null },
           { date: '2026-08-05', vixtwn: 35.62, vix: 16.50, oil: 78.97, us10y: 6.42, spread: null }
         ];
-        saveData();
+        saveDataLocalOnly();
       }
       render();
     }
 
-    function saveData() {
+    function saveDataLocalOnly() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+    }
+
+    // 核心無感自動寫入實體 macro_data.json
+    async function saveData() {
+      saveDataLocalOnly();
+      if (fileHandle) {
+        try {
+          const writable = await fileHandle.createWritable();
+          const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date));
+          await writable.write(JSON.stringify(sorted, null, 2));
+          await writable.close();
+          document.getElementById('file-link-status').textContent = '✅ 已成功即時覆蓋寫入本機 macro_data.json！';
+        } catch (e) {
+          console.error('寫入檔案失敗或權限受限:', e);
+        }
+      }
+    }
+
+    async function bindLocalFile() {
+      if ('showOpenFilePicker' in window) {
+        try {
+          [fileHandle] = await window.showOpenFilePicker({
+            types: [{
+              description: 'JSON Files',
+              accept: { 'application/json': ['.json'] }
+            }]
+          });
+          document.getElementById('file-link-status').textContent = '🟢 已成功綁定 ' + fileHandle.name + '！每次新增或離開網頁都會自動寫入硬碟！';
+          document.getElementById('link-file-btn').style.display = 'none';
+          await saveData();
+        } catch (err) {
+          console.log('取消選取檔案');
+        }
+      } else {
+        alert('您的瀏覽器不支援 HTML5 直接寫檔 API，請使用最新版 Chrome 或 Edge 瀏覽器！');
+      }
     }
 
     function downloadMacroDataJson() {
@@ -1097,7 +1153,7 @@
       input.focus();
       if (initVal !== '') input.select();
 
-      function commitEdit() {
+      async function commitEdit() {
         const raw = input.value.trim();
         const target = entries.find(e => e.date === date);
         if (target) {
@@ -1107,15 +1163,15 @@
             const num = parseFloat(raw);
             target[key] = isNaN(num) ? null : num;
           }
-          saveData();
+          await saveData();
         }
         render();
       }
 
       input.addEventListener('blur', commitEdit);
-      input.addEventListener('keydown', (e) => {
+      input.addEventListener('keydown', async (e) => {
         if (e.key === 'Enter') {
-          commitEdit();
+          await commitEdit();
         } else if (e.key === 'Escape') {
           td.innerHTML = oldHtml;
         }
@@ -1129,7 +1185,7 @@
       return isNaN(num) ? null : num;
     }
 
-    document.getElementById('save-btn').addEventListener('click', () => {
+    document.getElementById('save-btn').addEventListener('click', async () => {
       const date = document.getElementById('in-date').value;
       const statusEl = document.getElementById('status-text');
 
@@ -1147,11 +1203,11 @@
 
       entries = entries.filter(e => e.date !== date);
       entries.push({ date, vixtwn, vix, oil, us10y, spread });
-      saveData();
+      await saveData();
 
       statusEl.style.color = '#00e676';
-      statusEl.textContent = `✅ 已成功儲存 ${date} 數據！(按最下方【下載覆蓋 macro_data.json】可進行 Git Push 備份)`;
-      setTimeout(() => { statusEl.textContent = ''; }, 4000);
+      statusEl.textContent = `✅ 已成功儲存 ${date} 數據！`;
+      setTimeout(() => { statusEl.textContent = ''; }, 3000);
 
       render();
     });
@@ -1161,25 +1217,24 @@
       document.getElementById(id).addEventListener('blur', saveNotifyCfg);
     });
 
-    window.deleteEntry = function(date) {
+    window.deleteEntry = async function(date) {
       if (confirm(`確定要刪除 ${date} 的紀錄嗎？`)) {
         entries = entries.filter(e => e.date !== date);
-        saveData();
+        await saveData();
         render();
       }
     };
 
-    document.getElementById('clear-all-btn').addEventListener('click', () => {
+    document.getElementById('clear-all-btn').addEventListener('click', async () => {
       if (confirm('⚠️ 確定要清空資料庫裡的所有數據嗎？')) {
         entries = [];
-        saveData();
+        await saveData();
         render();
       }
     });
 
-    document.getElementById('download-file-btn').addEventListener('click', () => {
-      downloadMacroDataJson();
-    });
+    document.getElementById('link-file-btn').addEventListener('click', bindLocalFile);
+    document.getElementById('download-file-btn').addEventListener('click', downloadMacroDataJson);
 
     document.getElementById('copy-json-btn').addEventListener('click', () => {
       const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date));
@@ -1188,22 +1243,9 @@
       });
     });
 
-    document.getElementById('import-json-btn').addEventListener('click', () => {
-      const raw = prompt('請貼上備份的 JSON 資料：');
-      if (!raw) return;
-      try {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          entries = parsed;
-          saveData();
-          render();
-          alert('✅ 匯入成功！');
-        } else {
-          alert('❌ JSON 格式不正確！');
-        }
-      } catch (e) {
-        alert('❌ JSON 解析失敗！');
-      }
+    // 關閉網頁前自動觸發存檔
+    window.addEventListener('beforeunload', () => {
+      saveData();
     });
 
     setTodayDate();
