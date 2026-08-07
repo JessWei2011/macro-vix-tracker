@@ -1404,20 +1404,51 @@
       renderFreshnessBadges();
     }
 
+    // 依照各欄位的公布時間表，換算「現在這個時間點理論上能拿到的最新資料日期」，
+    // 而不是死板比對台灣今天的日期（美股/油價/美債本來就晚台灣一天公布）。
+    function shiftDateStr(dateStr, days) {
+      const d = new Date(dateStr + 'T00:00:00');
+      d.setDate(d.getDate() + days);
+      return d.toISOString().split('T')[0];
+    }
+
+    function getExpectedAsof(fieldKey) {
+      const now = new Date();
+      const h = now.getHours();
+      const today = now.toISOString().split('T')[0];
+      // VIXTWN 是台股當天自己的收盤，跟台灣日曆同一天。
+      // VIX / 美債 / 原油 / spread 都是美股夜盤資料，來源自己標註的日期
+      // 永遠是「前一個交易日」，所以過了公布時間後最新能拿到的也只是 D-1，不是 D。
+      switch (fieldKey) {
+        case 'vixtwn':
+          return h >= 14 ? today : shiftDateStr(today, -1);
+        case 'vix':
+        case 'us10y':
+          return h >= 4 ? shiftDateStr(today, -1) : shiftDateStr(today, -2);
+        case 'oil':
+          return h >= 5 ? shiftDateStr(today, -1) : shiftDateStr(today, -2);
+        case 'spread':
+          // FRED 本身回報的日期就是「前一個工作日」，晚上 22:00 後才會更新到最新一筆
+          return h >= 22 ? shiftDateStr(today, -1) : shiftDateStr(today, -2);
+        default:
+          return today;
+      }
+    }
+
     function renderFreshnessBadges() {
       const container = document.getElementById('freshness-badges');
       if (!container) return;
-      const today = new Date().toISOString().split('T')[0];
 
       container.innerHTML = FRESHNESS_FIELDS.map(f => {
         const info = macroMeta[f.key];
         if (!info || !info.asof) {
           return `<span class="delta-badge delta-flat" style="border-left:3px solid ${f.color};">⚪ ${f.label} 尚無自動更新紀錄</span>`;
         }
-        const isFresh = info.asof === today;
+        const expected = getExpectedAsof(f.key);
+        const isFresh = info.asof >= expected;
         const cls = isFresh ? 'delta-down' : 'delta-flat';
         const icon = isFresh ? '🟢' : '⚪';
-        const note = isFresh ? '今天最新' : `仍是 ${info.asof} 的值`;
+        const note = isFresh ? '目前最新' : `尚未更新（現有 ${info.asof}，預期應有 ${expected}）`;
         return `<span class="delta-badge ${cls}" style="border-left:3px solid ${f.color};" title="上次抓取: ${info.fetchedAt || '?'}">${icon} ${f.label} ${note}</span>`;
       }).join('');
     }
