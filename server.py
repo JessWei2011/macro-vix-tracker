@@ -13,6 +13,8 @@ Two jobs:
 import json
 import os
 import sys
+import threading
+import time
 from datetime import datetime
 from http.server import SimpleHTTPRequestHandler
 from pathlib import Path
@@ -107,6 +109,18 @@ def save_analysis(provider, text):
 class Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
+
+        if parsed.path == "/api/shutdown":
+            body = b'{"ok": true}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            # Give the response a moment to actually reach the browser before the process dies.
+            threading.Thread(target=lambda: (time.sleep(0.3), os._exit(0))).start()
+            return
+
         if not parsed.path.startswith("/api/analyze/"):
             self.send_response(404)
             self.end_headers()

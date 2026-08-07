@@ -600,6 +600,7 @@
       <h1>📊 每日總經與波動率追蹤 DB <span>(無感自動存檔版)</span></h1>
       <div style="display: flex; gap: 12px; align-items: center;">
         <div class="status-msg" id="db-count">筆數: 0</div>
+        <button class="btn btn-danger" id="shutdown-server-btn" title="關閉本機伺服器進程">🔴 關閉伺服器</button>
       </div>
     </header>
 
@@ -1266,6 +1267,14 @@
       const isHidden = panel.style.display === 'none';
       panel.style.display = isHidden ? 'block' : 'none';
       btn.textContent = isHidden ? '📕 收起分析結果' : '📖 展開分析結果';
+    });
+
+    document.getElementById('shutdown-server-btn').addEventListener('click', async () => {
+      if (!confirm('確定要關閉本機伺服器嗎？關閉後這個網頁就無法讀取最新資料或執行 AI 分析，要重新執行 update.bat 才能恢復。')) return;
+      try {
+        await fetch('/api/shutdown', { method: 'POST' });
+      } catch (e) {}
+      document.body.innerHTML = '<div style="padding:60px; text-align:center; font-size:22px; color: var(--text-main);">✅ 伺服器已關閉，你可以關閉這個瀏覽器分頁了。</div>';
     });
 
     async function loadPastAnalysis() {
