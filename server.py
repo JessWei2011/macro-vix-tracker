@@ -99,6 +99,9 @@ def call_gemini(prompt):
         json={
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "tools": [{"google_search": {}}],
+            # -1 = 動態思考預算，讓模型自己決定要想多久，適合這種需要推因果的分析
+            # （而不是用固定的低預算，逼它跳過推理直接給答案）。
+            "generationConfig": {"thinkingConfig": {"thinkingBudget": -1}},
         },
         timeout=90,
     )
