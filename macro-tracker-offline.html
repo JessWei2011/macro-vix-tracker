@@ -496,19 +496,6 @@
     td.num-cell:nth-child(5) { border-left: 3px solid var(--col-us10y); }
     td.num-cell:nth-child(6) { border-left: 3px solid var(--col-spread); }
 
-    /* 上方輸入框同步分色 */
-    #in-vixtwn { border-color: var(--col-vixtwn); color: var(--col-vixtwn); }
-    #in-vix { border-color: var(--col-vix); color: var(--col-vix); }
-    #in-oil { border-color: var(--col-oil); color: var(--col-oil); }
-    #in-us10y { border-color: var(--col-us10y); color: var(--col-us10y); }
-    #in-spread { border-color: var(--col-spread); color: var(--col-spread); }
-
-    .form-group:has(#in-vixtwn) label { color: var(--col-vixtwn); }
-    .form-group:has(#in-vix) label { color: var(--col-vix); }
-    .form-group:has(#in-oil) label { color: var(--col-oil); }
-    .form-group:has(#in-us10y) label { color: var(--col-us10y); }
-    .form-group:has(#in-spread) label { color: var(--col-spread); }
-
     .blank-tag {
       color: #777788;
       font-size: 15px;
@@ -616,11 +603,11 @@
       </div>
     </header>
 
-    <!-- 【區塊 1】：輸入數值區 -->
+    <!-- 【區塊 1】：資料更新時間參考 -->
     <div class="entry-card">
-      <div class="card-title">📝 填入今日數據</div>
-      <div style="font-size:14px; color: var(--text-sub); margin-bottom:14px; line-height:1.7;">
-        ⏰ <strong style="color:var(--text-main);">各項數據台灣時間公布/更新參考</strong>（可執行 <code>update_macro_data.py</code> 自動抓取的時機）：
+      <div class="card-title">⏰ 各項數據台灣時間公布/更新參考</div>
+      <div style="font-size:14px; color: var(--text-sub); line-height:1.7;">
+        （<code>update_macro_data.py</code> 自動抓取的時機）：
         <div style="display:flex; flex-wrap:wrap; gap: 6px 18px; margin-top:6px;">
           <span><span style="color:var(--col-vixtwn); font-weight:700;">VIXTWN</span>　約 13:45～14:00（台股期貨收盤即出）</span>
           <span><span style="color:var(--col-vix); font-weight:700;">VIX</span>　約隔天凌晨 04:00 後（美股收盤 +12hr）</span>
@@ -629,36 +616,6 @@
           <span><span style="color:var(--col-spread); font-weight:700;">Spread</span>　約當天晚上 21:00～22:00（FRED 為前一工作日數值，T+1 落後）</span>
         </div>
         <div id="freshness-badges" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;"></div>
-      </div>
-      <div class="grid-form">
-        <div class="form-group">
-          <label>日期</label>
-          <input type="date" id="in-date">
-        </div>
-        <div class="form-group">
-          <label>VIXTWN <span>(選填)</span></label>
-          <input type="number" step="0.01" id="in-vixtwn" placeholder="可留白">
-        </div>
-        <div class="form-group">
-          <label>VIX <span>(選填)</span></label>
-          <input type="number" step="0.01" id="in-vix" placeholder="可留白">
-        </div>
-        <div class="form-group">
-          <label>布蘭特原油 <span>(選填)</span></label>
-          <input type="number" step="0.01" id="in-oil" placeholder="可留白">
-        </div>
-        <div class="form-group">
-          <label>10年美債 % <span>(選填)</span></label>
-          <input type="number" step="0.01" id="in-us10y" placeholder="可留白">
-        </div>
-        <div class="form-group">
-          <label>利差 Spread % <span>(選填)</span></label>
-          <input type="number" step="0.01" id="in-spread" placeholder="可留白">
-        </div>
-      </div>
-      <div class="btn-row">
-        <div class="status-msg" id="status-text"></div>
-        <button class="btn btn-primary" id="save-btn">💾 儲存 / 更新今日數據</button>
       </div>
     </div>
 
@@ -761,7 +718,44 @@
 
     </div>
 
-    <!-- 【區塊 3】：策略區 / 通知門檻區 -->
+    <!-- 【區塊 3】：數值區 / 表格顯示區 -->
+    <div class="edit-tip">💡 提示：點擊數字即可內聯修改。</div>
+
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 140px;">日期</th>
+            <th>VIXTWN (台) ✏️</th>
+            <th>VIX (美) ✏️</th>
+            <th>布蘭特原油 ($) ✏️</th>
+            <th>10年美債 (%) ✏️</th>
+            <th>利差 Spread (%) ✏️</th>
+            <th style="width: 60px; text-align: center;">刪除</th>
+          </tr>
+        </thead>
+        <tbody id="table-body">
+          <!-- 數據動態插入 -->
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 【區塊 4】：存檔區 / Git 數據備份同步區 -->
+    <div class="backup-card">
+      <div class="backup-header">
+        <div>
+          <div class="card-title" style="margin-bottom:4px;">📁 Git 同步檔 (macro_data.json)</div>
+          <div class="file-sync-status" id="file-link-status">✅ 由 update.bat / update_macro_data.py 自動寫入並 push 到 GitHub</div>
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button class="btn btn-secondary" id="download-file-btn">💾 手動下載 macro_data.json</button>
+          <button class="btn btn-secondary" id="copy-json-btn">📋 複製 JSON</button>
+        </div>
+      </div>
+      <div class="status-msg" id="copy-json-status" style="margin-top: 10px; min-height: 22px;"></div>
+    </div>
+
+    <!-- 【區塊 5】：策略區 / 通知門檻區（移到最下方） -->
     <!-- 觸發加碼通知彈出橫幅 -->
     <div class="alert-banner" id="alert-banner">
       <div class="alert-banner-title">🚨 【策略加碼通知觸發！】</div>
@@ -800,43 +794,6 @@
         </div>
       </div>
     </div>
-
-    <!-- 【區塊 4】：數值區 / 表格顯示區 -->
-    <div class="edit-tip">💡 提示：點擊數字即可內聯修改。點擊日期欄可填入上方編輯！</div>
-
-    <div class="table-container">
-      <table>
-        <thead>
-          <tr>
-            <th style="width: 140px;">日期 (點擊載入)</th>
-            <th>VIXTWN (台) ✏️</th>
-            <th>VIX (美) ✏️</th>
-            <th>布蘭特原油 ($) ✏️</th>
-            <th>10年美債 (%) ✏️</th>
-            <th>利差 Spread (%) ✏️</th>
-            <th style="width: 60px; text-align: center;">刪除</th>
-          </tr>
-        </thead>
-        <tbody id="table-body">
-          <!-- 數據動態插入 -->
-        </tbody>
-      </table>
-    </div>
-
-    <!-- 【區塊 5】：存檔區 / Git 數據備份同步區 -->
-    <div class="backup-card">
-      <div class="backup-header">
-        <div>
-          <div class="card-title" style="margin-bottom:4px;">📁 Git 同步檔 (macro_data.json)</div>
-          <div class="file-sync-status" id="file-link-status">✅ 由 update.bat / update_macro_data.py 自動寫入並 push 到 GitHub</div>
-        </div>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <button class="btn btn-secondary" id="download-file-btn">💾 手動下載 macro_data.json</button>
-          <button class="btn btn-secondary" id="copy-json-btn">📋 複製 JSON</button>
-        </div>
-      </div>
-      <div class="status-msg" id="copy-json-status" style="margin-top: 10px; min-height: 22px;"></div>
-    </div>
   </div>
 
   <script>
@@ -849,11 +806,6 @@
       n2_us10y: 4.65,
       n3_us10y: 4.85
     };
-
-    function setTodayDate() {
-      const today = new Date().toISOString().split('T')[0];
-      document.getElementById('in-date').value = today;
-    }
 
     function loadNotifyCfg() {
       const raw = localStorage.getItem(NOTIFY_CONFIG_KEY);
@@ -1107,7 +1059,7 @@
       renderFreshnessBadges();
 
       if (sorted.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--text-sub); padding: 40px;">目前無數據，請在上方選擇日期後點擊儲存！</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--text-sub); padding: 40px;">目前無數據，請執行 update_macro_data.py 抓取。</td></tr>`;
         return;
       }
 
@@ -1117,7 +1069,7 @@
 
         html += `
           <tr>
-            <td class="date-cell" onclick="loadRowToForm('${item.date}')" title="點擊載入此日資料到上方表格">${item.date} 📝</td>
+            <td class="date-cell">${item.date}</td>
             <td class="num-cell" onclick="startEditCell(this, '${item.date}', 'vixtwn', ${item.vixtwn})">
               ${renderCellContent(item, prevItem, sorted, index, 'vixtwn')}
             </td>
@@ -1139,39 +1091,6 @@
       });
 
       tbody.innerHTML = html;
-    }
-
-    window.loadRowToForm = function(date, silent) {
-      const target = entries.find(e => e.date === date);
-      if (!target) return;
-
-      document.getElementById('in-date').value = target.date;
-      document.getElementById('in-vixtwn').value = (target.vixtwn !== null && target.vixtwn !== undefined && !isNaN(target.vixtwn)) ? target.vixtwn : '';
-      document.getElementById('in-vix').value = (target.vix !== null && target.vix !== undefined && !isNaN(target.vix)) ? target.vix : '';
-      document.getElementById('in-oil').value = (target.oil !== null && target.oil !== undefined && !isNaN(target.oil)) ? target.oil : '';
-      document.getElementById('in-us10y').value = (target.us10y !== null && target.us10y !== undefined && !isNaN(target.us10y)) ? target.us10y : '';
-      document.getElementById('in-spread').value = (target.spread !== null && target.spread !== undefined && !isNaN(target.spread)) ? target.spread : '';
-
-      if (silent) return;
-
-      const statusEl = document.getElementById('status-text');
-      statusEl.style.color = '#00e5ff';
-      statusEl.textContent = `📋 已將 ${date} 數據載入上方輸入框，修改後按「儲存」即可！`;
-      setTimeout(() => { statusEl.textContent = ''; }, 4000);
-
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    };
-
-    // 若下方表格已有「今天」的資料，開頁時自動帶入最上方輸入框，不用捲動查找
-    function loadTodayIntoFormIfExists() {
-      const today = document.getElementById('in-date').value;
-      const target = entries.find(e => e.date === today);
-      if (target) {
-        window.loadRowToForm(today, true);
-        const statusEl = document.getElementById('status-text');
-        statusEl.style.color = '#00e5ff';
-        statusEl.textContent = `📋 已自動帶入今日 (${today}) 既有數據，修改後按「儲存」即可更新！`;
-      }
     }
 
     window.startEditCell = function(td, date, key, currentRawVal) {
@@ -1209,40 +1128,6 @@
         }
       });
     };
-
-    function parseInput(id) {
-      const raw = document.getElementById(id).value.trim();
-      if (raw === '') return null;
-      const num = parseFloat(raw);
-      return isNaN(num) ? null : num;
-    }
-
-    document.getElementById('save-btn').addEventListener('click', async () => {
-      const date = document.getElementById('in-date').value;
-      const statusEl = document.getElementById('status-text');
-
-      if (!date) {
-        statusEl.style.color = '#ff4d4d';
-        statusEl.textContent = '❌ 請至少選擇日期！';
-        return;
-      }
-
-      const vixtwn = parseInput('in-vixtwn');
-      const vix = parseInput('in-vix');
-      const oil = parseInput('in-oil');
-      const us10y = parseInput('in-us10y');
-      const spread = parseInput('in-spread');
-
-      entries = entries.filter(e => e.date !== date);
-      entries.push({ date, vixtwn, vix, oil, us10y, spread });
-      await saveData();
-
-      statusEl.style.color = '#00e676';
-      statusEl.textContent = `✅ 已成功儲存 ${date} 數據！`;
-      setTimeout(() => { statusEl.textContent = ''; }, 3000);
-
-      render();
-    });
 
     ['cfg-n1-vix', 'cfg-n2-us10y', 'cfg-n3-us10y'].forEach(id => {
       document.getElementById(id).addEventListener('change', saveNotifyCfg);
@@ -1339,9 +1224,8 @@
       }).join('');
     }
 
-    setTodayDate();
     loadNotifyCfg();
-    loadData().then(loadTodayIntoFormIfExists);
+    loadData();
   </script>
 </body>
 </html>
