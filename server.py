@@ -102,13 +102,21 @@ def call_gemini_api(system_instruction, user_text, use_search):
     )
     if not resp.ok:
         return None, f"Gemini API 錯誤 {resp.status_code}: {resp.text[:500]}"
-    candidates = resp.json().get("candidates", [])
+    body_json = resp.json()
+    candidates = body_json.get("candidates", [])
     if not candidates:
+        print(f"[gemini debug] 無 candidates，完整回應: {json.dumps(body_json, ensure_ascii=False)[:1000]}")
         return None, "Gemini 沒有回傳內容"
     parts = candidates[0].get("content", {}).get("parts", [])
     text = "\n".join(p["text"] for p in parts if "text" in p)
     # 偶爾模型會吐出字面上的反斜線+n，而不是真正的換行字元；直接修正掉。
     text = text.replace("\\n", "\n")
+    if not text:
+        finish_reason = candidates[0].get("finishReason")
+        print(
+            f"[gemini debug] 無文字內容，finishReason={finish_reason}，"
+            f"candidate: {json.dumps(candidates[0], ensure_ascii=False)[:1000]}"
+        )
     return (text or None), (None if text else "Gemini 沒有回傳文字內容")
 
 
