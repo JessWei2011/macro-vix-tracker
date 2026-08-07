@@ -475,6 +475,40 @@
       font-weight: 700;
     }
 
+    /* 五項數據分色，方便一眼辨識欄位 */
+    :root {
+      --col-vixtwn: #ff6b6b;
+      --col-vix: #ffb74d;
+      --col-oil: #4dd0e1;
+      --col-us10y: #ba68c8;
+      --col-spread: #81c784;
+    }
+
+    th:nth-child(2), td.num-cell:nth-child(2) .cell-value { color: var(--col-vixtwn); }
+    th:nth-child(3), td.num-cell:nth-child(3) .cell-value { color: var(--col-vix); }
+    th:nth-child(4), td.num-cell:nth-child(4) .cell-value { color: var(--col-oil); }
+    th:nth-child(5), td.num-cell:nth-child(5) .cell-value { color: var(--col-us10y); }
+    th:nth-child(6), td.num-cell:nth-child(6) .cell-value { color: var(--col-spread); }
+
+    td.num-cell:nth-child(2) { border-left: 3px solid var(--col-vixtwn); }
+    td.num-cell:nth-child(3) { border-left: 3px solid var(--col-vix); }
+    td.num-cell:nth-child(4) { border-left: 3px solid var(--col-oil); }
+    td.num-cell:nth-child(5) { border-left: 3px solid var(--col-us10y); }
+    td.num-cell:nth-child(6) { border-left: 3px solid var(--col-spread); }
+
+    /* 上方輸入框同步分色 */
+    #in-vixtwn { border-color: var(--col-vixtwn); color: var(--col-vixtwn); }
+    #in-vix { border-color: var(--col-vix); color: var(--col-vix); }
+    #in-oil { border-color: var(--col-oil); color: var(--col-oil); }
+    #in-us10y { border-color: var(--col-us10y); color: var(--col-us10y); }
+    #in-spread { border-color: var(--col-spread); color: var(--col-spread); }
+
+    .form-group:has(#in-vixtwn) label { color: var(--col-vixtwn); }
+    .form-group:has(#in-vix) label { color: var(--col-vix); }
+    .form-group:has(#in-oil) label { color: var(--col-oil); }
+    .form-group:has(#in-us10y) label { color: var(--col-us10y); }
+    .form-group:has(#in-spread) label { color: var(--col-spread); }
+
     .blank-tag {
       color: #777788;
       font-size: 15px;
@@ -792,6 +826,7 @@
           <button class="btn btn-secondary" id="copy-json-btn">📋 複製 JSON</button>
         </div>
       </div>
+      <div class="status-msg" id="copy-json-status" style="margin-top: 10px; min-height: 22px;"></div>
     </div>
   </div>
 
@@ -807,6 +842,77 @@
     };
 
     let fileHandle = null; // HTML5 File System Access API Handle
+    const IDB_NAME = 'macro_vix_idb';
+    const IDB_STORE = 'handles';
+    const IDB_KEY = 'macro_data_file';
+
+    function idbOpen() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(IDB_NAME, 1);
+        req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function idbSaveHandle(handle) {
+      const db = await idbOpen();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).put(handle, IDB_KEY);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    async function idbGetHandle() {
+      const db = await idbOpen();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readonly');
+        const req = tx.objectStore(IDB_STORE).get(IDB_KEY);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    // 頁面載入時嘗試恢復先前綁定的檔案（若瀏覽器仍保有授權則直接生效）
+    async function tryRestoreFileHandle() {
+      if (!('indexedDB' in window) || !('showOpenFilePicker' in window)) return;
+      try {
+        const handle = await idbGetHandle();
+        if (!handle) return;
+        const perm = await handle.queryPermission({ mode: 'readwrite' });
+        if (perm === 'granted') {
+          fileHandle = handle;
+          document.getElementById('file-link-status').textContent = '🟢 已自動恢復綁定 ' + fileHandle.name + '！';
+          document.getElementById('link-file-btn').style.display = 'none';
+        } else {
+          // 尚有記錄但需要使用者手動點一次重新授權（瀏覽器安全限制，無法自動跳過）
+          fileHandle = handle;
+          document.getElementById('file-link-status').textContent = '🟡 偵測到先前綁定的 ' + handle.name + '，請點一次「重新授權」恢復自動存檔';
+          const btn = document.getElementById('link-file-btn');
+          btn.textContent = '🔓 重新授權 ' + handle.name;
+          btn.style.display = 'inline-flex';
+          btn.onclick = reauthorizeFileHandle;
+        }
+      } catch (e) {
+        console.log('恢復檔案綁定失敗:', e);
+      }
+    }
+
+    async function reauthorizeFileHandle() {
+      if (!fileHandle) return;
+      try {
+        const perm = await fileHandle.requestPermission({ mode: 'readwrite' });
+        if (perm === 'granted') {
+          document.getElementById('file-link-status').textContent = '🟢 已重新授權 ' + fileHandle.name + '！';
+          document.getElementById('link-file-btn').style.display = 'none';
+          await saveData();
+        }
+      } catch (e) {
+        console.log('重新授權失敗:', e);
+      }
+    }
 
     function setTodayDate() {
       const today = new Date().toISOString().split('T')[0];
@@ -909,6 +1015,7 @@
           });
           document.getElementById('file-link-status').textContent = '🟢 已成功綁定 ' + fileHandle.name + '！每次新增或離開網頁都會自動寫入硬碟！';
           document.getElementById('link-file-btn').style.display = 'none';
+          try { await idbSaveHandle(fileHandle); } catch (e) { console.log('儲存綁定記錄失敗:', e); }
           await saveData();
         } catch (err) {
           console.log('取消選取檔案');
@@ -1123,7 +1230,7 @@
       tbody.innerHTML = html;
     }
 
-    window.loadRowToForm = function(date) {
+    window.loadRowToForm = function(date, silent) {
       const target = entries.find(e => e.date === date);
       if (!target) return;
 
@@ -1134,6 +1241,8 @@
       document.getElementById('in-us10y').value = (target.us10y !== null && target.us10y !== undefined && !isNaN(target.us10y)) ? target.us10y : '';
       document.getElementById('in-spread').value = (target.spread !== null && target.spread !== undefined && !isNaN(target.spread)) ? target.spread : '';
 
+      if (silent) return;
+
       const statusEl = document.getElementById('status-text');
       statusEl.style.color = '#00e5ff';
       statusEl.textContent = `📋 已將 ${date} 數據載入上方輸入框，修改後按「儲存」即可！`;
@@ -1141,6 +1250,18 @@
 
       window.scrollTo({ top: 0, behavior: 'smooth' });
     };
+
+    // 若下方表格已有「今天」的資料，開頁時自動帶入最上方輸入框，不用捲動查找
+    function loadTodayIntoFormIfExists() {
+      const today = document.getElementById('in-date').value;
+      const target = entries.find(e => e.date === today);
+      if (target) {
+        window.loadRowToForm(today, true);
+        const statusEl = document.getElementById('status-text');
+        statusEl.style.color = '#00e5ff';
+        statusEl.textContent = `📋 已自動帶入今日 (${today}) 既有數據，修改後按「儲存」即可更新！`;
+      }
+    }
 
     window.startEditCell = function(td, date, key, currentRawVal) {
       if (td.querySelector('.edit-input')) return;
@@ -1238,8 +1359,15 @@
 
     document.getElementById('copy-json-btn').addEventListener('click', () => {
       const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date));
+      const statusEl = document.getElementById('copy-json-status');
       navigator.clipboard.writeText(JSON.stringify(sorted, null, 2)).then(() => {
-        alert('📋 完整 JSON 資料已複製！');
+        statusEl.style.color = '#00e676';
+        statusEl.textContent = '✅ 已複製到剪貼簿！';
+        setTimeout(() => { statusEl.textContent = ''; }, 2500);
+      }).catch(() => {
+        statusEl.style.color = '#ff4d4d';
+        statusEl.textContent = '❌ 複製失敗，請手動選取複製。';
+        setTimeout(() => { statusEl.textContent = ''; }, 3000);
       });
     });
 
@@ -1250,7 +1378,8 @@
 
     setTodayDate();
     loadNotifyCfg();
-    loadData();
+    loadData().then(loadTodayIntoFormIfExists);
+    tryRestoreFileHandle();
   </script>
 </body>
 </html>
