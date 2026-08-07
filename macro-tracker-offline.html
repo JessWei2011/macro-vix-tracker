@@ -1205,6 +1205,7 @@
 
       updateIndicatorLights(sorted);
       checkNotifications(sorted);
+      renderFreshnessBadges();
 
       if (sorted.length === 0) {
         tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--text-sub); padding: 40px;">目前無數據，請在上方選擇日期後點擊儲存！</td></tr>`;
@@ -1394,16 +1395,6 @@
       { key: 'us10y', label: '10年美債', color: 'var(--col-us10y)' },
       { key: 'spread', label: 'Spread', color: 'var(--col-spread)' }
     ];
-    let macroMeta = {};
-
-    async function loadMeta() {
-      try {
-        const resp = await fetch('./macro_meta.json?t=' + Date.now());
-        if (resp.ok) macroMeta = await resp.json();
-      } catch (e) {}
-      renderFreshnessBadges();
-    }
-
     // 依照各欄位的公布時間表，換算「現在這個時間點理論上能拿到的最新資料日期」，
     // 而不是死板比對台灣今天的日期（美股/油價/美債本來就晚台灣一天公布）。
     function shiftDateStr(dateStr, days) {
@@ -1439,8 +1430,12 @@
       const container = document.getElementById('freshness-badges');
       if (!container) return;
 
+      const todayStr = new Date().toISOString().split('T')[0];
+      const todayEntry = entries.find(e => e.date === todayStr);
+      const meta = (todayEntry && todayEntry._meta) || {};
+
       container.innerHTML = FRESHNESS_FIELDS.map(f => {
-        const info = macroMeta[f.key];
+        const info = meta[f.key];
         if (!info || !info.asof) {
           return `<span class="delta-badge delta-flat" style="border-left:3px solid ${f.color};">⚪ ${f.label} 尚無自動更新紀錄</span>`;
         }
@@ -1456,7 +1451,6 @@
     setTodayDate();
     loadNotifyCfg();
     loadData().then(loadTodayIntoFormIfExists);
-    loadMeta();
     tryRestoreFileHandle();
   </script>
 </body>

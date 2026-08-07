@@ -16,7 +16,6 @@ if sys.stdout.encoding != "utf-8":
 
 DIR = Path(__file__).resolve().parent
 DATA_FILE = DIR / "macro_data.json"
-META_FILE = DIR / "macro_meta.json"
 
 sys.path.insert(0, str(DIR))
 try:
@@ -39,7 +38,7 @@ def git_pull():
 
 
 def git_commit_and_push(today):
-    code, out, err = run_git("add", "macro_data.json", "macro_meta.json")
+    code, out, err = run_git("add", "macro_data.json")
     code, out, err = run_git("commit", "-m", f"Auto update macro data for {today}")
     if code != 0:
         if "nothing to commit" in (out + err):
@@ -134,7 +133,6 @@ def main():
     git_pull()
 
     entries = json.loads(DATA_FILE.read_text(encoding="utf-8")) if DATA_FILE.exists() else []
-    meta = json.loads(META_FILE.read_text(encoding="utf-8")) if META_FILE.exists() else {}
     today = date.today().isoformat()
     now_iso = datetime.now().astimezone().isoformat(timespec="seconds")
 
@@ -151,16 +149,18 @@ def main():
         entry = {"date": today, "vixtwn": None, "vix": None, "oil": None, "us10y": None, "spread": None}
         entries.append(entry)
 
+    meta = entry.get("_meta", {})
     updated_fields = []
     for key, (val, asof) in fetched.items():
         if val is not None:
             entry[key] = val
             meta[key] = {"asof": asof, "fetchedAt": now_iso}
             updated_fields.append(key)
+    if meta:
+        entry["_meta"] = meta
 
     entries.sort(key=lambda e: e["date"])
     DATA_FILE.write_text(json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8")
-    META_FILE.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
 
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {today} 更新欄位: {updated_fields or '(無新資料)'}")
     for key, info in meta.items():
