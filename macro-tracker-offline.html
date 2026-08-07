@@ -609,15 +609,14 @@
       <div class="card-title">⏰ 各項數據台灣時間公布/更新參考</div>
       <div style="font-size:14px; color: var(--text-sub); line-height:1.7;">
         （<code>update_macro_data.py</code> 自動抓取的時機）：
-        <div style="display:flex; flex-wrap:wrap; gap: 6px 18px; margin-top:6px;">
-          <span><span style="color:var(--col-vixtwn); font-weight:700;">VIXTWN</span>　約 13:45～14:00（台股期貨收盤即出）</span>
-          <span><span style="color:var(--col-vix); font-weight:700;">VIX</span>　約隔天凌晨 04:00 後（美股收盤 +12hr）</span>
-          <span><span style="color:var(--col-us10y); font-weight:700;">10年美債</span>　約隔天凌晨 03:00～04:00</span>
-          <span><span style="color:var(--col-oil); font-weight:700;">布蘭特原油</span>　約隔天凌晨 02:30～05:00（近24hr盤，時間較浮動）</span>
-          <span><span style="color:var(--col-spread); font-weight:700;">Spread</span>　約當天晚上 21:00～22:00（FRED 為前一工作日數值，T+1 落後）</span>
-        </div>
         <div id="freshness-badges" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;"></div>
       </div>
+    </div>
+
+    <!-- 觸發加碼通知彈出橫幅 -->
+    <div class="alert-banner" id="alert-banner">
+      <div class="alert-banner-title">🚨 【策略加碼通知觸發！】</div>
+      <div id="alert-list"></div>
     </div>
 
     <!-- 【區塊 2】：燈號區 (雙市場恐慌燈號戰情室) -->
@@ -773,12 +772,6 @@
     </div>
 
     <!-- 【區塊 5】：策略區 / 通知門檻區（移到最下方） -->
-    <!-- 觸發加碼通知彈出橫幅 -->
-    <div class="alert-banner" id="alert-banner">
-      <div class="alert-banner-title">🚨 【策略加碼通知觸發！】</div>
-      <div id="alert-list"></div>
-    </div>
-
     <!-- 🔔 自訂通知參數設定卡片 -->
     <div class="notify-settings-card">
       <div class="card-title">🔔 策略加碼通知門檻 (可自由修改，系統自動記憶)</div>
@@ -824,22 +817,39 @@
       n3_us10y: 4.85
     };
 
-    function loadNotifyCfg() {
-      const raw = localStorage.getItem(NOTIFY_CONFIG_KEY);
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw);
-          if (parsed.n1_vix !== undefined) notifyCfg.n1_vix = parseFloat(parsed.n1_vix);
-          if (parsed.n2_us10y !== undefined) notifyCfg.n2_us10y = parseFloat(parsed.n2_us10y);
-          if (parsed.n3_us10y !== undefined) notifyCfg.n3_us10y = parseFloat(parsed.n3_us10y);
-        } catch (e) {}
-      }
+    function applyNotifyCfgToInputs() {
       document.getElementById('cfg-n1-vix').value = notifyCfg.n1_vix;
       document.getElementById('cfg-n2-us10y').value = notifyCfg.n2_us10y;
       document.getElementById('cfg-n3-us10y').value = notifyCfg.n3_us10y;
     }
 
-    function saveNotifyCfg() {
+    function applyParsedNotifyCfg(parsed) {
+      if (parsed.n1_vix !== undefined) notifyCfg.n1_vix = parseFloat(parsed.n1_vix);
+      if (parsed.n2_us10y !== undefined) notifyCfg.n2_us10y = parseFloat(parsed.n2_us10y);
+      if (parsed.n3_us10y !== undefined) notifyCfg.n3_us10y = parseFloat(parsed.n3_us10y);
+    }
+
+    async function loadNotifyCfg() {
+      // notify_config.json 是兩台電腦同步門檻值的真正來源（跟 macro_data.json 一樣靠 git 同步）；
+      // localStorage 只在 file:// 直接雙擊開啟、fetch 被 CORS 擋掉時當離線快取備援。
+      try {
+        const resp = await fetch('./notify_config.json?t=' + Date.now());
+        if (resp.ok) {
+          applyParsedNotifyCfg(await resp.json());
+          applyNotifyCfgToInputs();
+          return;
+        }
+      } catch (e) {
+        console.warn('[DEBUG] fetch notify_config.json 失敗，改用 localStorage 快取:', e);
+      }
+      const raw = localStorage.getItem(NOTIFY_CONFIG_KEY);
+      if (raw) {
+        try { applyParsedNotifyCfg(JSON.parse(raw)); } catch (e) {}
+      }
+      applyNotifyCfgToInputs();
+    }
+
+    async function saveNotifyCfg() {
       const n1 = parseFloat(document.getElementById('cfg-n1-vix').value);
       const n2 = parseFloat(document.getElementById('cfg-n2-us10y').value);
       const n3 = parseFloat(document.getElementById('cfg-n3-us10y').value);
@@ -850,6 +860,17 @@
 
       localStorage.setItem(NOTIFY_CONFIG_KEY, JSON.stringify(notifyCfg));
       render();
+
+      try {
+        const resp = await fetch('/api/save-notify-config', {
+          method: 'POST',
+          body: JSON.stringify(notifyCfg),
+        });
+        const data = await resp.json();
+        if (!data.ok) console.error('[DEBUG] 同步門檻值到 GitHub 失敗:', data.error);
+      } catch (e) {
+        console.error('[DEBUG] 無法連線本機伺服器 API，門檻值只存在這台電腦（localStorage）:', e);
+      }
     }
 
     async function loadData() {

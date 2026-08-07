@@ -12,6 +12,7 @@ Two jobs:
 """
 import json
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -30,6 +31,7 @@ if sys.stdout.encoding != "utf-8":
 DIR = Path(__file__).resolve().parent
 DATA_FILE = DIR / "macro_data.json"
 ANALYSIS_FILE = DIR / "macro_analysis.json"
+NOTIFY_CONFIG_FILE = DIR / "notify_config.json"
 PORT = 8934
 
 sys.path.insert(0, str(DIR))
@@ -144,6 +146,23 @@ def call_gemini(prompt):
     return compressed_text, None
 
 
+def save_notify_config(cfg):
+    NOTIFY_CONFIG_FILE.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
+    result = subprocess.run(["git", "pull", "--rebase"], cwd=DIR, capture_output=True, text=True)
+    if result.returncode != 0:
+        return f"已存到本機，但 git pull 失敗（請手動處理後重新整理頁面重試）: {result.stderr.strip()}"
+    subprocess.run(["git", "add", "notify_config.json"], cwd=DIR, capture_output=True, text=True)
+    commit = subprocess.run(
+        ["git", "commit", "-m", "Update notify thresholds"], cwd=DIR, capture_output=True, text=True
+    )
+    if commit.returncode != 0 and "nothing to commit" not in (commit.stdout + commit.stderr):
+        return f"已存到本機，但 git commit 失敗: {commit.stderr.strip()}"
+    push = subprocess.run(["git", "push"], cwd=DIR, capture_output=True, text=True)
+    if push.returncode != 0:
+        return f"已存到本機並 commit，但 git push 失敗（請手動執行 push.bat）: {push.stderr.strip()}"
+    return None
+
+
 def save_analysis(provider, text):
     data = {}
     if ANALYSIS_FILE.exists():
@@ -177,6 +196,25 @@ class Handler(SimpleHTTPRequestHandler):
             self.wfile.write(body)
             # Give the response a moment to actually reach the browser before the process dies.
             threading.Thread(target=lambda: (time.sleep(0.3), os._exit(0))).start()
+            return
+
+        if parsed.path == "/api/save-notify-config":
+            length = int(self.headers.get("Content-Length", 0))
+            try:
+                cfg = json.loads(self.rfile.read(length).decode("utf-8"))
+            except Exception:
+                cfg = None
+            if not isinstance(cfg, dict):
+                body = json.dumps({"ok": False, "error": "無效的設定內容"}).encode("utf-8")
+                self.send_response(400)
+            else:
+                error = save_notify_config(cfg)
+                body = json.dumps({"ok": error is None, "error": error}, ensure_ascii=False).encode("utf-8")
+                self.send_response(200 if error is None else 500)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
             return
 
         if not parsed.path.startswith("/api/analyze/"):
