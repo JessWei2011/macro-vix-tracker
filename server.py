@@ -155,7 +155,9 @@ def save_notify_config(cfg):
     commit = subprocess.run(
         ["git", "commit", "-m", "Update notify thresholds"], cwd=DIR, capture_output=True, text=True
     )
-    if commit.returncode != 0 and "nothing to commit" not in (commit.stdout + commit.stderr):
+    commit_output = commit.stdout + commit.stderr
+    nothing_changed = "nothing to commit" in commit_output or "nothing added to commit" in commit_output
+    if commit.returncode != 0 and not nothing_changed:
         return f"已存到本機，但 git commit 失敗: {commit.stderr.strip()}"
     push = subprocess.run(["git", "push"], cwd=DIR, capture_output=True, text=True)
     if push.returncode != 0:
