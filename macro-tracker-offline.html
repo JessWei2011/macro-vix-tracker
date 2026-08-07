@@ -620,6 +620,16 @@
     <!-- 【區塊 1】：輸入數值區 -->
     <div class="entry-card">
       <div class="card-title">📝 填入今日數據</div>
+      <div style="font-size:14px; color: var(--text-sub); margin-bottom:14px; line-height:1.7;">
+        ⏰ <strong style="color:var(--text-main);">各項數據台灣時間公布/更新參考</strong>（可執行 <code>update_macro_data.py</code> 自動抓取的時機）：
+        <div style="display:flex; flex-wrap:wrap; gap: 6px 18px; margin-top:6px;">
+          <span><span style="color:var(--col-vixtwn); font-weight:700;">VIXTWN</span>　約 13:45～14:00（台股期貨收盤即出）</span>
+          <span><span style="color:var(--col-vix); font-weight:700;">VIX</span>　約隔天凌晨 04:00 後（美股收盤 +12hr）</span>
+          <span><span style="color:var(--col-us10y); font-weight:700;">10年美債</span>　約隔天凌晨 03:00～04:00</span>
+          <span><span style="color:var(--col-oil); font-weight:700;">布蘭特原油</span>　約隔天凌晨 02:30～05:00（近24hr盤，時間較浮動）</span>
+          <span><span style="color:var(--col-spread); font-weight:700;">Spread</span>　約當天晚上 21:00～22:00（FRED 為前一工作日數值，T+1 落後）</span>
+        </div>
+      </div>
       <div class="grid-form">
         <div class="form-group">
           <label>日期</label>
