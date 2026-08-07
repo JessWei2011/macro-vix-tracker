@@ -1270,7 +1270,6 @@
     });
 
     document.getElementById('shutdown-server-btn').addEventListener('click', async () => {
-      if (!confirm('確定要關閉本機伺服器嗎？關閉後這個網頁就無法讀取最新資料或執行 AI 分析，要重新執行 update.bat 才能恢復。')) return;
       try {
         await fetch('/api/shutdown', { method: 'POST' });
       } catch (e) {}
