@@ -107,6 +107,12 @@ def save_analysis(provider, text):
 
 
 class Handler(SimpleHTTPRequestHandler):
+    def end_headers(self):
+        # This is a local dev server whose files change constantly (data updates, code
+        # updates) -- never let the browser cache anything, or it'll show stale pages.
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+        super().end_headers()
+
     def do_POST(self):
         parsed = urlparse(self.path)
 
