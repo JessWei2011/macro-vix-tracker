@@ -16,6 +16,7 @@ if sys.stdout.encoding != "utf-8":
 
 DIR = Path(__file__).resolve().parent
 DATA_FILE = DIR / "macro_data.json"
+META_FILE = DIR / "macro_meta.json"
 
 sys.path.insert(0, str(DIR))
 try:
@@ -38,7 +39,7 @@ def git_pull():
 
 
 def git_commit_and_push(today):
-    code, out, err = run_git("add", "macro_data.json")
+    code, out, err = run_git("add", "macro_data.json", "macro_meta.json")
     code, out, err = run_git("commit", "-m", f"Auto update macro data for {today}")
     if code != 0:
         if "nothing to commit" in (out + err):
@@ -55,36 +56,38 @@ def git_commit_and_push(today):
 
 
 def fetch_yfinance_last_close(ticker):
+    """Returns (value, asof_date_iso) for the most recent completed daily bar."""
     try:
         import yfinance as yf
         hist = yf.Ticker(ticker).history(period="5d")
         if hist.empty:
-            return None
-        return float(hist["Close"].iloc[-1])
+            return None, None
+        asof = hist.index[-1].strftime("%Y-%m-%d")
+        return float(hist["Close"].iloc[-1]), asof
     except Exception as e:
         print(f"[警告] 抓取 {ticker} 失敗: {e}")
-        return None
+        return None, None
 
 
 def fetch_vix():
-    val = fetch_yfinance_last_close("^VIX")
-    return round(val, 2) if val is not None else None
+    val, asof = fetch_yfinance_last_close("^VIX")
+    return (round(val, 2), asof) if val is not None else (None, None)
 
 
 def fetch_oil():
-    val = fetch_yfinance_last_close("BZ=F")
-    return round(val, 2) if val is not None else None
+    val, asof = fetch_yfinance_last_close("BZ=F")
+    return (round(val, 2), asof) if val is not None else (None, None)
 
 
 def fetch_us10y():
-    val = fetch_yfinance_last_close("^TNX")
-    return round(val, 3) if val is not None else None
+    val, asof = fetch_yfinance_last_close("^TNX")
+    return (round(val, 3), asof) if val is not None else (None, None)
 
 
 def fetch_spread():
     if not FRED_API_KEY:
         print("[警告] 找不到 FRED_API_KEY (config_local.py)，略過 spread")
-        return None
+        return None, None
     try:
         import requests
         url = (
@@ -96,11 +99,11 @@ def fetch_spread():
         resp.raise_for_status()
         obs = resp.json()["observations"][0]
         if obs["value"] == ".":
-            return None
-        return float(obs["value"])
+            return None, None
+        return float(obs["value"]), obs["date"]
     except Exception as e:
         print(f"[警告] 抓取 FRED spread 失敗: {e}")
-        return None
+        return None, None
 
 
 def fetch_vixtwn():
@@ -117,21 +120,23 @@ def fetch_vixtwn():
             if line.strip() and not line.startswith("-") and "交易日期" not in line
         ]
         if not lines:
-            return None
+            return None, None
         row_date, _time, value, _pre_close_avg = lines[-1].split()
         if row_date != today.strftime("%Y%m%d"):
-            return None  # 期交所還沒發布今天的收盤資料
-        return float(value)
+            return None, None  # 期交所還沒發布今天的收盤資料
+        return float(value), today.isoformat()
     except Exception as e:
         print(f"[警告] 抓取 VIXTWN 失敗: {e}")
-        return None
+        return None, None
 
 
 def main():
     git_pull()
 
     entries = json.loads(DATA_FILE.read_text(encoding="utf-8")) if DATA_FILE.exists() else []
+    meta = json.loads(META_FILE.read_text(encoding="utf-8")) if META_FILE.exists() else {}
     today = date.today().isoformat()
+    now_iso = datetime.now().astimezone().isoformat(timespec="seconds")
 
     fetched = {
         "vixtwn": fetch_vixtwn(),
@@ -147,15 +152,19 @@ def main():
         entries.append(entry)
 
     updated_fields = []
-    for key, val in fetched.items():
+    for key, (val, asof) in fetched.items():
         if val is not None:
             entry[key] = val
+            meta[key] = {"asof": asof, "fetchedAt": now_iso}
             updated_fields.append(key)
 
     entries.sort(key=lambda e: e["date"])
     DATA_FILE.write_text(json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8")
+    META_FILE.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
 
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {today} 更新欄位: {updated_fields or '(無新資料)'}")
+    for key, info in meta.items():
+        print(f"  - {key}: 資料日期 {info['asof']}（{'今天' if info['asof'] == today else '非今天'}）")
 
     git_commit_and_push(today)
 

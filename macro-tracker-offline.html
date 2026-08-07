@@ -629,6 +629,7 @@
           <span><span style="color:var(--col-oil); font-weight:700;">布蘭特原油</span>　約隔天凌晨 02:30～05:00（近24hr盤，時間較浮動）</span>
           <span><span style="color:var(--col-spread); font-weight:700;">Spread</span>　約當天晚上 21:00～22:00（FRED 為前一工作日數值，T+1 落後）</span>
         </div>
+        <div id="freshness-badges" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;"></div>
       </div>
       <div class="grid-form">
         <div class="form-group">
@@ -1386,9 +1387,45 @@
       saveData();
     });
 
+    const FRESHNESS_FIELDS = [
+      { key: 'vixtwn', label: 'VIXTWN', color: 'var(--col-vixtwn)' },
+      { key: 'vix', label: 'VIX', color: 'var(--col-vix)' },
+      { key: 'oil', label: '布蘭特原油', color: 'var(--col-oil)' },
+      { key: 'us10y', label: '10年美債', color: 'var(--col-us10y)' },
+      { key: 'spread', label: 'Spread', color: 'var(--col-spread)' }
+    ];
+    let macroMeta = {};
+
+    async function loadMeta() {
+      try {
+        const resp = await fetch('./macro_meta.json?t=' + Date.now());
+        if (resp.ok) macroMeta = await resp.json();
+      } catch (e) {}
+      renderFreshnessBadges();
+    }
+
+    function renderFreshnessBadges() {
+      const container = document.getElementById('freshness-badges');
+      if (!container) return;
+      const today = new Date().toISOString().split('T')[0];
+
+      container.innerHTML = FRESHNESS_FIELDS.map(f => {
+        const info = macroMeta[f.key];
+        if (!info || !info.asof) {
+          return `<span class="delta-badge delta-flat" style="border-left:3px solid ${f.color};">⚪ ${f.label} 尚無自動更新紀錄</span>`;
+        }
+        const isFresh = info.asof === today;
+        const cls = isFresh ? 'delta-down' : 'delta-flat';
+        const icon = isFresh ? '🟢' : '⚪';
+        const note = isFresh ? '今天最新' : `仍是 ${info.asof} 的值`;
+        return `<span class="delta-badge ${cls}" style="border-left:3px solid ${f.color};" title="上次抓取: ${info.fetchedAt || '?'}">${icon} ${f.label} ${note}</span>`;
+      }).join('');
+    }
+
     setTodayDate();
     loadNotifyCfg();
     loadData().then(loadTodayIntoFormIfExists);
+    loadMeta();
     tryRestoreFileHandle();
   </script>
 </body>
