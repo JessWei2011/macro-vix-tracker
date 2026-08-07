@@ -723,8 +723,9 @@
       <div class="card-title">🤖 AI 總經分析（因果解讀，不是數字整理）</div>
       <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
         <button class="btn btn-primary" id="analyze-gemini-btn">🔵 用 Gemini 分析</button>
+        <button class="btn btn-secondary" id="toggle-gemini-result-btn">📖 展開分析結果</button>
       </div>
-      <div class="board-card">
+      <div class="board-card" id="gemini-result-panel" style="display:none;">
         <div class="board-title">
           <span>Gemini</span>
           <span class="status-msg" id="gemini-status" style="font-size:14px;"></span>
@@ -1258,6 +1259,14 @@
     }
 
     document.getElementById('analyze-gemini-btn').addEventListener('click', () => runAnalysis('gemini'));
+
+    document.getElementById('toggle-gemini-result-btn').addEventListener('click', () => {
+      const panel = document.getElementById('gemini-result-panel');
+      const btn = document.getElementById('toggle-gemini-result-btn');
+      const isHidden = panel.style.display === 'none';
+      panel.style.display = isHidden ? 'block' : 'none';
+      btn.textContent = isHidden ? '📕 收起分析結果' : '📖 展開分析結果';
+    });
 
     async function loadPastAnalysis() {
       try {
