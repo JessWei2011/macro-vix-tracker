@@ -62,24 +62,40 @@ def build_prompt():
 1.【原因】今天變動最明顯的 1-2 項指標，用你查到的最新新聞/事件解釋「為什麼」會這樣變動（例如 OPEC+ 決策、地緣政治、Fed 談話、經濟數據公布等具體原因，不要只是複述數字）。
 2.【傳導】這個變動可能如何牽動其他資產／指數（例如黃金、美元指數、科技股、公債），方向是看漲還是看跌，並說明傳導邏輯。
 3.【投資策略建議】依據這 5 項數據的走勢，針對以下 5 檔標的分別給出具體策略建議：QQQM、0050（台股大盤ETF）、IAU（黃金）、00948B、00953B。
-   每一檔請明確給出「緊抱／加碼／減碼／出場」其中一種立場（可以是同一個立場給不同權重，但不要模稜兩可地都不表態），並用 1-2 句話說明為什麼（要連回前面①②的因果邏輯，不是憑空給結論）。
+   每一檔請明確給出「緊抱／加碼／減碼／出場」其中一種立場，並說明為什麼（要連回前面①②的因果邏輯）。
 
-請用繁體中文回答，段落分明，不需要客套話開場。"""
+請用繁體中文回答，段落分明。"""
 
 
-def call_gemini(prompt):
-    if not GEMINI_API_KEY:
-        return None, "尚未設定 GEMINI_API_KEY（請在 ai_keys_local.py 填入）"
+COMPRESS_INSTRUCTION = """你的任務是把輸入的總經分析文字，濃縮成精簡的因果箭頭鏈格式，只做濃縮改寫，禁止新增原文沒有的資訊，禁止替換或發明原文沒提到的資產代號。
+
+【格式規則，違反視為失敗】
+- 每一個論點寫成一行：事件 --> 中間結果 --> 中間結果 --> 最終結論，3~5 個節點，整行不超過 40 個字。
+- 範例：科技股（QQQM）: 原油上漲 --> 增加企業運營成本 --> 高通膨高利率 --> 不利科技股 --> QQQM看跌
+- 節點只能是名詞或極短詞組，不准有「可能」「因此」「顯示」等連接詞或完整句子，不准在箭頭鏈後面加冒號解釋。
+- 保留原文的三個段落標題【原因】【傳導】【投資策略建議】。
+- 第三段【投資策略建議】只能包含這 5 檔，逐一列出、順序不變、代號不可更改替換：QQQM、0050、IAU、00948B、00953B。每檔一行，結尾保留「緊抱／加碼／減碼／出場」其中一種立場。
+- 不要開場白、不要總結、不要客套話，只留三個標題加項目符號。
+- 輸出必須用真正的換行分隔每一行，絕對不要輸出字面上的反斜線加n（\\n）這種字元。
+- 整份輸出字數上限 300 字（含標點）。
+
+用繁體中文輸出。"""
+
+
+def call_gemini_api(system_instruction, user_text, use_search):
+    body = {
+        "contents": [{"role": "user", "parts": [{"text": user_text}]}],
+        "generationConfig": {"thinkingConfig": {"thinkingBudget": 0}, "maxOutputTokens": 1024},
+    }
+    if system_instruction:
+        body["systemInstruction"] = {"parts": [{"text": system_instruction}]}
+    if use_search:
+        body["tools"] = [{"google_search": {}}]
+
     resp = requests.post(
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
         f"?key={GEMINI_API_KEY}",
-        json={
-            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "tools": [{"google_search": {}}],
-            # -1 = 動態思考預算，讓模型自己決定要想多久，適合這種需要推因果的分析
-            # （而不是用固定的低預算，逼它跳過推理直接給答案）。
-            "generationConfig": {"thinkingConfig": {"thinkingBudget": -1}},
-        },
+        json=body,
         timeout=90,
     )
     if not resp.ok:
@@ -89,7 +105,33 @@ def call_gemini(prompt):
         return None, "Gemini 沒有回傳內容"
     parts = candidates[0].get("content", {}).get("parts", [])
     text = "\n".join(p["text"] for p in parts if "text" in p)
-    return text or None, None if text else "Gemini 沒有回傳文字內容"
+    # 偶爾模型會吐出字面上的反斜線+n，而不是真正的換行字元；直接修正掉。
+    text = text.replace("\\n", "\n")
+    return (text or None), (None if text else "Gemini 沒有回傳文字內容")
+
+
+def call_gemini(prompt):
+    if not GEMINI_API_KEY:
+        return None, "尚未設定 GEMINI_API_KEY（請在 ai_keys_local.py 填入）"
+
+    # 階段一：讓模型正常查資料、正常寫分析（開 google_search，不逼格式，寫得詳細沒關係）。
+    # 實測發現：格式規則和 google_search 工具一起給時，模型幾乎每次都無視格式規則，
+    # 寫成長篇報告。與其硬逼一次到位，不如讓它先把研究做好。
+    raw_text, error = call_gemini_api(None, prompt, use_search=True)
+    if not raw_text:
+        return None, error
+
+    # 階段二：另外開一次「純改寫」呼叫，不開搜尋工具，只把階段一的文字壓縮成因果箭頭鏈。
+    # 拿掉搜尋工具的干擾後，格式指令的遵守度大幅提升。
+    compress_input = (
+        f"{raw_text}\n\n---\n"
+        "提醒：【投資策略建議】只能是這 5 檔，不可替換成其他代號：QQQM、0050、IAU、00948B、00953B。"
+    )
+    compressed_text, error = call_gemini_api(COMPRESS_INSTRUCTION, compress_input, use_search=False)
+    if not compressed_text:
+        return raw_text, None  # 濃縮失敗就退回原始版本，總比沒有分析好
+
+    return compressed_text, None
 
 
 def save_analysis(provider, text):
