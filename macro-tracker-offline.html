@@ -1242,8 +1242,11 @@
     }
 
     async function runAnalysis(provider) {
+      const btn = document.getElementById(`analyze-${provider}-btn`);
       const statusEl = document.getElementById(`${provider}-status`);
       const resultEl = document.getElementById(`${provider}-result`);
+      if (btn.disabled) return;
+      btn.disabled = true;
       statusEl.textContent = '⏳ 分析中...(可能需要 10~30 秒)';
       try {
         const resp = await fetch(`/api/analyze/${provider}`, { method: 'POST' });
@@ -1256,6 +1259,8 @@
         }
       } catch (e) {
         statusEl.textContent = '❌ 無法連線本機伺服器 API（請確認是用 update.bat 開啟的網頁，不是直接雙擊 html）: ' + e.message;
+      } finally {
+        btn.disabled = false;
       }
     }
 
