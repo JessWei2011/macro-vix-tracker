@@ -147,10 +147,10 @@ def call_gemini(prompt):
 
 
 def save_notify_config(cfg):
-    NOTIFY_CONFIG_FILE.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
     result = subprocess.run(["git", "pull", "--rebase"], cwd=DIR, capture_output=True, text=True)
     if result.returncode != 0:
-        return f"已存到本機，但 git pull 失敗（請手動處理後重新整理頁面重試）: {result.stderr.strip()}"
+        return f"git pull 失敗，未儲存（請手動處理後重新整理頁面重試）: {result.stderr.strip()}"
+    NOTIFY_CONFIG_FILE.write_text(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     subprocess.run(["git", "add", "notify_config.json"], cwd=DIR, capture_output=True, text=True)
     commit = subprocess.run(
         ["git", "commit", "-m", "Update notify thresholds"], cwd=DIR, capture_output=True, text=True
