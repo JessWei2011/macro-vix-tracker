@@ -1274,7 +1274,10 @@
       try {
         await fetch('/api/shutdown', { method: 'POST' });
       } catch (e) {}
-      document.body.innerHTML = '<div style="padding:60px; text-align:center; font-size:22px; color: var(--text-main);">✅ 伺服器已關閉，你可以關閉這個瀏覽器分頁了。</div>';
+      document.body.innerHTML = '<div style="padding:60px; text-align:center; font-size:22px; color: var(--text-main);">✅ 伺服器已關閉，正在嘗試關閉分頁...如果沒有反應，代表瀏覽器不允許網頁自己關閉這個分頁，麻煩手動關閉（Ctrl+W）。</div>';
+      // 瀏覽器安全限制：只有「網頁自己用程式打開的分頁」才能用 window.close() 關閉，
+      // 像這種用 update.bat 的 start 指令開出來的分頁，多數瀏覽器會直接忽略，屬正常現象。
+      window.close();
     });
 
     async function loadPastAnalysis() {
