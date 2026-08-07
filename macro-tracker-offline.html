@@ -961,8 +961,10 @@
     async function loadData() {
       try {
         const response = await fetch('./macro_data.json?t=' + Date.now());
+        console.log('[DEBUG] fetch macro_data.json, ok=', response.ok, 'status=', response.status);
         if (response.ok) {
           const jsonFileData = await response.json();
+          console.log('[DEBUG] fetch 成功，最後一筆資料 =', jsonFileData[jsonFileData.length - 1]);
           if (Array.isArray(jsonFileData) && jsonFileData.length > 0) {
             entries = jsonFileData;
             saveDataLocalOnly();
@@ -970,10 +972,13 @@
             return;
           }
         }
-      } catch (e) {}
+      } catch (e) {
+        console.error('[DEBUG] fetch macro_data.json 失敗（很可能是 file:// 被瀏覽器擋掉 CORS），改用 localStorage 快取:', e);
+      }
 
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
+        console.warn('[DEBUG] 目前使用的是 localStorage 快取，不是即時讀檔，資料可能是舊的！');
         try {
           entries = JSON.parse(raw);
         } catch (e) {
@@ -1433,6 +1438,7 @@
       const todayStr = new Date().toISOString().split('T')[0];
       const todayEntry = entries.find(e => e.date === todayStr);
       const meta = (todayEntry && todayEntry._meta) || {};
+      console.log('[DEBUG] renderFreshnessBadges: 瀏覽器判斷今天=', todayStr, '找到的今日資料=', todayEntry, '_meta=', meta);
 
       container.innerHTML = FRESHNESS_FIELDS.map(f => {
         const info = meta[f.key];
