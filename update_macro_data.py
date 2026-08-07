@@ -1,11 +1,8 @@
 """
-Fetch VIX / Brent oil / US10Y / HY OAS spread and merge into macro_data.json.
-Run on either computer, any time of day. Pulls latest data first, only
-overwrites fields it actually got a fresh value for (never blanks a field
-with None), then commits and pushes.
-
-VIXTWN is not yet automated (no free official API) -- keep entering it
-manually via the web page until that's solved.
+Fetch VIXTWN / VIX / Brent oil / US10Y / HY OAS spread and merge into
+macro_data.json. Run on either computer, any time of day. Pulls latest data
+first, only overwrites fields it actually got a fresh value for (never
+blanks a field with None), then commits and pushes.
 """
 import json
 import subprocess
@@ -107,8 +104,27 @@ def fetch_spread():
 
 
 def fetch_vixtwn():
-    # TODO: 期交所沒有正式免費 API，尚未自動化，先留空由網頁手動輸入
-    return None
+    today = date.today()
+    yyyymm = today.strftime("%Y%m")
+    url = f"https://www.taifex.com.tw/file/taifex/Dailydownload/vix/log2data/{yyyymm}new.txt"
+    try:
+        import requests
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        text = resp.content.decode("big5", errors="ignore")
+        lines = [
+            line for line in text.splitlines()
+            if line.strip() and not line.startswith("-") and "交易日期" not in line
+        ]
+        if not lines:
+            return None
+        row_date, _time, value, _pre_close_avg = lines[-1].split()
+        if row_date != today.strftime("%Y%m%d"):
+            return None  # 期交所還沒發布今天的收盤資料
+        return float(value)
+    except Exception as e:
+        print(f"[警告] 抓取 VIXTWN 失敗: {e}")
+        return None
 
 
 def main():
