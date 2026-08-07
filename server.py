@@ -5,10 +5,10 @@ Two jobs:
 1. Serve the static files (macro-tracker-offline.html, macro_data.json, ...)
    so the page's fetch() calls work -- opening the html directly via file://
    gets fetch() blocked by the browser's CORS policy.
-2. Expose POST /api/analyze/<claude|gemini> so the page's "AI 總經分析"
-   buttons can trigger a macro analysis without ever putting an API key in
-   browser-side JS. Keys are read from ai_keys_local.py (gitignored, filled
-   in by hand -- never committed, never printed).
+2. Expose POST /api/analyze/gemini so the page's "AI 總經分析" button can
+   trigger a macro analysis without ever putting an API key in browser-side
+   JS. The key is read from ai_keys_local.py (gitignored, filled in by hand
+   -- never committed, never printed).
 """
 import json
 import os
@@ -32,9 +32,8 @@ PORT = 8934
 
 sys.path.insert(0, str(DIR))
 try:
-    from ai_keys_local import ANTHROPIC_API_KEY, GEMINI_API_KEY
+    from ai_keys_local import GEMINI_API_KEY
 except ImportError:
-    ANTHROPIC_API_KEY = ""
     GEMINI_API_KEY = ""
 
 FIELD_LABELS = {
@@ -65,36 +64,11 @@ def build_prompt():
 請用繁體中文回答，段落分明，不需要客套話開場。"""
 
 
-def call_claude(prompt):
-    if not ANTHROPIC_API_KEY:
-        return None, "尚未設定 ANTHROPIC_API_KEY（請在 ai_keys_local.py 填入）"
-    resp = requests.post(
-        "https://api.anthropic.com/v1/messages",
-        headers={
-            "x-api-key": ANTHROPIC_API_KEY,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
-        },
-        json={
-            "model": "claude-sonnet-5",
-            "max_tokens": 2000,
-            "tools": [{"type": "web_search_20250305", "name": "web_search"}],
-            "messages": [{"role": "user", "content": prompt}],
-        },
-        timeout=90,
-    )
-    if not resp.ok:
-        return None, f"Claude API 錯誤 {resp.status_code}: {resp.text[:500]}"
-    blocks = resp.json().get("content", [])
-    text = "\n".join(b["text"] for b in blocks if b.get("type") == "text")
-    return text or None, None if text else "Claude 沒有回傳文字內容"
-
-
 def call_gemini(prompt):
     if not GEMINI_API_KEY:
         return None, "尚未設定 GEMINI_API_KEY（請在 ai_keys_local.py 填入）"
     resp = requests.post(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent"
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
         f"?key={GEMINI_API_KEY}",
         json={
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
@@ -139,9 +113,7 @@ class Handler(SimpleHTTPRequestHandler):
 
         provider = parsed.path.rsplit("/", 1)[-1]
         prompt = build_prompt()
-        if provider == "claude":
-            text, error = call_claude(prompt)
-        elif provider == "gemini":
+        if provider == "gemini":
             text, error = call_gemini(prompt)
         else:
             text, error = None, f"未知的 provider: {provider}"

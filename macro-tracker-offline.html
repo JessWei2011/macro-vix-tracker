@@ -718,28 +718,18 @@
 
     </div>
 
-    <!-- 【區塊 2.5】：AI 總經分析比較 (Claude vs Gemini) -->
+    <!-- 【區塊 2.5】：AI 總經分析 (Gemini) -->
     <div class="entry-card">
       <div class="card-title">🤖 AI 總經分析（因果解讀，不是數字整理）</div>
       <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
-        <button class="btn btn-primary" id="analyze-claude-btn">🟣 用 Claude 分析</button>
         <button class="btn btn-primary" id="analyze-gemini-btn">🔵 用 Gemini 分析</button>
       </div>
-      <div class="indicator-boards-grid" style="margin-bottom:0;">
-        <div class="board-card">
-          <div class="board-title">
-            <span>Claude</span>
-            <span class="status-msg" id="claude-status" style="font-size:14px;"></span>
-          </div>
-          <div id="claude-result" style="white-space:pre-wrap; font-size:15px; line-height:1.8; color: var(--text-main);">尚未產生分析。</div>
+      <div class="board-card">
+        <div class="board-title">
+          <span>Gemini</span>
+          <span class="status-msg" id="gemini-status" style="font-size:14px;"></span>
         </div>
-        <div class="board-card">
-          <div class="board-title">
-            <span>Gemini</span>
-            <span class="status-msg" id="gemini-status" style="font-size:14px;"></span>
-          </div>
-          <div id="gemini-result" style="white-space:pre-wrap; font-size:15px; line-height:1.8; color: var(--text-main);">尚未產生分析。</div>
-        </div>
+        <div id="gemini-result" style="white-space:pre-wrap; font-size:15px; line-height:1.8; color: var(--text-main);">尚未產生分析。</div>
       </div>
     </div>
 
@@ -1267,7 +1257,6 @@
       }
     }
 
-    document.getElementById('analyze-claude-btn').addEventListener('click', () => runAnalysis('claude'));
     document.getElementById('analyze-gemini-btn').addEventListener('click', () => runAnalysis('gemini'));
 
     async function loadPastAnalysis() {
@@ -1275,7 +1264,7 @@
         const resp = await fetch('./macro_analysis.json?t=' + Date.now());
         if (!resp.ok) return;
         const data = await resp.json();
-        ['claude', 'gemini'].forEach(p => {
+        ['gemini'].forEach(p => {
           if (data[p]) {
             document.getElementById(`${p}-result`).textContent = data[p].text;
             document.getElementById(`${p}-status`).textContent = '📅 上次產生: ' + data[p].generatedAt;
