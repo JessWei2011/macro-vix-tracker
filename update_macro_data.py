@@ -7,7 +7,7 @@ blanks a field with None), then commits and pushes.
 import json
 import subprocess
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 if sys.stdout.encoding != "utf-8":
@@ -129,6 +129,24 @@ def fetch_vixtwn():
         return None, None
 
 
+def get_expected_asof(key, now):
+    """跟網頁 getExpectedAsof() 邏輯一致：
+    VIXTWN 是台股當天自己的收盤，跟台灣日曆同一天。
+    VIX/美債/原油/spread 都是美股夜盤資料，來源自己標註的日期永遠是「前一個交易日」，
+    所以過了公布時間後最新能拿到的也只是 D-1，不是 D。"""
+    today = now.date()
+    h = now.hour
+    if key == "vixtwn":
+        return (today if h >= 14 else today - timedelta(days=1)).isoformat()
+    if key in ("vix", "us10y"):
+        return (today - timedelta(days=1) if h >= 4 else today - timedelta(days=2)).isoformat()
+    if key == "oil":
+        return (today - timedelta(days=1) if h >= 5 else today - timedelta(days=2)).isoformat()
+    if key == "spread":
+        return (today - timedelta(days=1) if h >= 22 else today - timedelta(days=2)).isoformat()
+    return today.isoformat()
+
+
 def main():
     git_pull()
 
@@ -162,9 +180,13 @@ def main():
     entries.sort(key=lambda e: e["date"])
     DATA_FILE.write_text(json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {today} 更新欄位: {updated_fields or '(無新資料)'}")
+    now = datetime.now()
+    print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] {today} 更新欄位: {updated_fields or '(無新資料)'}")
     for key, info in meta.items():
-        print(f"  - {key}: 資料日期 {info['asof']}（{'今天' if info['asof'] == today else '非今天'}）")
+        expected = get_expected_asof(key, now)
+        is_fresh = info["asof"] >= expected
+        status = "🟢 目前最新" if is_fresh else f"⚪ 尚未更新（預期應有 {expected}）"
+        print(f"  - {key}: 資料日期 {info['asof']} {status}")
 
     git_commit_and_push(today)
 
