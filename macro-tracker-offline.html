@@ -211,6 +211,24 @@
       color: var(--accent);
     }
 
+    .result-tab-btn {
+      font-size: 14px;
+      font-weight: 700;
+      padding: 6px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--card-border);
+      background-color: #2a2d3a;
+      color: var(--text-main);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .result-tab-btn:hover { color: var(--accent); }
+    .result-tab-btn.active {
+      background-color: var(--accent);
+      color: #000000;
+      border-color: var(--accent);
+    }
+
     /* 2. 燈號區 (雙市場恐慌燈號戰情室) */
     .indicator-boards-grid {
       display: grid;
@@ -718,28 +736,23 @@
 
     </div>
 
-    <!-- 【區塊 2.5】：AI 總經分析 (Gemini) -->
+    <!-- 【區塊 2.5】：AI 總經分析 (Gemini / 備援共用同一個顯示區，用上面的小按鈕切換) -->
     <div class="entry-card">
       <div class="card-title">🤖 AI 總經分析（因果解讀，不是數字整理）</div>
       <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
         <button class="btn btn-primary" id="analyze-gemini-btn">🔵 用 Gemini 分析</button>
-        <button class="btn btn-secondary" id="toggle-gemini-result-btn">📖 展開分析結果</button>
         <button class="btn btn-secondary" id="analyze-fallback-btn" title="跳過 Gemini，直接測試 Tavily 搜尋 + Groq 分析這條備援線">🟠 測試備援方案 (Tavily+Groq)</button>
-        <button class="btn btn-secondary" id="toggle-fallback-result-btn">📖 展開備援結果</button>
+        <button class="btn btn-secondary" id="toggle-result-panel-btn">📖 展開分析結果</button>
       </div>
-      <div class="board-card" id="gemini-result-panel" style="display:none;">
-        <div class="board-title">
-          <span>Gemini</span>
-          <span class="status-msg" id="gemini-status" style="font-size:14px;"></span>
+      <div class="board-card" id="result-panel" style="display:none;">
+        <div style="display:flex; gap:8px; margin-bottom:14px;">
+          <button class="result-tab-btn active" id="tab-gemini-btn" data-provider="gemini">🔵 Gemini</button>
+          <button class="result-tab-btn" id="tab-fallback-btn" data-provider="fallback">🟠 備援 (Tavily+Groq)</button>
         </div>
-        <div id="gemini-result" style="white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; max-width:100%; font-size:19px; line-height:1.9; color: var(--text-main);">尚未產生分析。</div>
-      </div>
-      <div class="board-card" id="fallback-result-panel" style="display:none; margin-top:12px;">
         <div class="board-title">
-          <span>備援 (Tavily+Groq)</span>
-          <span class="status-msg" id="fallback-status" style="font-size:14px;"></span>
+          <span class="status-msg" id="analysis-status" style="font-size:14px;"></span>
         </div>
-        <div id="fallback-result" style="white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; max-width:100%; font-size:19px; line-height:1.9; color: var(--text-main);">尚未產生分析。</div>
+        <div id="analysis-result" style="white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; max-width:100%; font-size:19px; line-height:1.9; color: var(--text-main);">尚未產生分析。</div>
       </div>
     </div>
 
@@ -1274,6 +1287,37 @@
     const ANALYSIS_COOLDOWN_MS = 30000; // 完成後至少要等這麼久才能再按一次，避免連續呼叫 Gemini/連續 git commit
     const analysisButtonLabel = {};
 
+    // Gemini 跟備援共用同一塊顯示區，不再各自一個展開/收起面板互相打架。
+    // 兩邊的文字/狀態分別存在這個快取裡，畫面上只渲染目前選到的那個 tab。
+    const analysisCache = {
+      gemini: { text: '尚未產生分析。', status: '' },
+      fallback: { text: '尚未產生分析。', status: '' },
+    };
+    let activeProvider = 'gemini';
+
+    function renderActiveProvider() {
+      const entry = analysisCache[activeProvider];
+      document.getElementById('analysis-result').textContent = entry.text;
+      document.getElementById('analysis-status').textContent = entry.status;
+      document.querySelectorAll('.result-tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.provider === activeProvider);
+      });
+    }
+
+    function switchToProvider(provider) {
+      activeProvider = provider;
+      renderActiveProvider();
+      const panel = document.getElementById('result-panel');
+      if (panel.style.display === 'none') {
+        panel.style.display = 'block';
+        document.getElementById('toggle-result-panel-btn').textContent = '📕 收起分析結果';
+      }
+    }
+
+    document.querySelectorAll('.result-tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => switchToProvider(btn.dataset.provider));
+    });
+
     function startAnalysisCooldown(provider) {
       const btn = document.getElementById(`analyze-${provider}-btn`);
       const until = Date.now() + ANALYSIS_COOLDOWN_MS;
@@ -1293,25 +1337,26 @@
 
     async function runAnalysis(provider) {
       const btn = document.getElementById(`analyze-${provider}-btn`);
-      const statusEl = document.getElementById(`${provider}-status`);
-      const resultEl = document.getElementById(`${provider}-result`);
       if (btn.disabled) return;
       if (!analysisButtonLabel[provider]) analysisButtonLabel[provider] = btn.textContent;
       btn.disabled = true;
-      statusEl.textContent = '⏳ 分析中...(可能需要 10~30 秒)';
+      switchToProvider(provider); // 按了哪顆分析鈕，畫面就自動切去看那顆的結果
+      analysisCache[provider].status = '⏳ 分析中...(可能需要 10~30 秒)';
+      renderActiveProvider();
       try {
         const resp = await fetch(`/api/analyze/${provider}`, { method: 'POST' });
         const data = await resp.json();
         if (data.ok) {
-          resultEl.textContent = data.text;
-          statusEl.textContent = '✅ 完成 ' + new Date().toLocaleString('zh-TW')
+          analysisCache[provider].text = data.text;
+          analysisCache[provider].status = '✅ 完成 ' + new Date().toLocaleString('zh-TW')
             + (data.syncError ? ' ｜ ⚠️ ' + data.syncError : '');
         } else {
-          statusEl.textContent = '❌ ' + (data.error || '未知錯誤');
+          analysisCache[provider].status = '❌ ' + (data.error || '未知錯誤');
         }
       } catch (e) {
-        statusEl.textContent = '❌ 無法連線本機伺服器 API（請確認是用 update.bat 開啟的網頁，不是直接雙擊 html）: ' + e.message;
+        analysisCache[provider].status = '❌ 無法連線本機伺服器 API（請確認是用 update.bat 開啟的網頁，不是直接雙擊 html）: ' + e.message;
       } finally {
+        if (activeProvider === provider) renderActiveProvider();
         startAnalysisCooldown(provider);
       }
     }
@@ -1319,17 +1364,13 @@
     document.getElementById('analyze-gemini-btn').addEventListener('click', () => runAnalysis('gemini'));
     document.getElementById('analyze-fallback-btn').addEventListener('click', () => runAnalysis('fallback'));
 
-    function setupToggleResultBtn(toggleBtnId, panelId, showLabel, hideLabel) {
-      document.getElementById(toggleBtnId).addEventListener('click', () => {
-        const panel = document.getElementById(panelId);
-        const btn = document.getElementById(toggleBtnId);
-        const isHidden = panel.style.display === 'none';
-        panel.style.display = isHidden ? 'block' : 'none';
-        btn.textContent = isHidden ? hideLabel : showLabel;
-      });
-    }
-    setupToggleResultBtn('toggle-gemini-result-btn', 'gemini-result-panel', '📖 展開分析結果', '📕 收起分析結果');
-    setupToggleResultBtn('toggle-fallback-result-btn', 'fallback-result-panel', '📖 展開備援結果', '📕 收起備援結果');
+    document.getElementById('toggle-result-panel-btn').addEventListener('click', () => {
+      const panel = document.getElementById('result-panel');
+      const btn = document.getElementById('toggle-result-panel-btn');
+      const isHidden = panel.style.display === 'none';
+      panel.style.display = isHidden ? 'block' : 'none';
+      btn.textContent = isHidden ? '📕 收起分析結果' : '📖 展開分析結果';
+    });
 
     document.getElementById('shutdown-server-btn').addEventListener('click', async () => {
       try {
@@ -1348,10 +1389,10 @@
         const data = await resp.json();
         ['gemini', 'fallback'].forEach(p => {
           if (data[p]) {
-            document.getElementById(`${p}-result`).textContent = data[p].text;
-            document.getElementById(`${p}-status`).textContent = '📅 上次產生: ' + data[p].generatedAt;
+            analysisCache[p] = { text: data[p].text, status: '📅 上次產生: ' + data[p].generatedAt };
           }
         });
+        renderActiveProvider();
       } catch (e) {}
     }
 
