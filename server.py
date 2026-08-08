@@ -86,10 +86,10 @@ COMPRESS_INSTRUCTION = """你的任務是把輸入的總經分析文字，濃縮
 用繁體中文輸出。"""
 
 
-def call_gemini_api(system_instruction, user_text, use_search):
+def call_gemini_api(system_instruction, user_text, use_search, max_tokens=1024):
     body = {
         "contents": [{"role": "user", "parts": [{"text": user_text}]}],
-        "generationConfig": {"thinkingConfig": {"thinkingBudget": 0}, "maxOutputTokens": 1024},
+        "generationConfig": {"thinkingConfig": {"thinkingBudget": 0}, "maxOutputTokens": max_tokens},
     }
     if system_instruction:
         body["systemInstruction"] = {"parts": [{"text": system_instruction}]}
@@ -103,23 +103,26 @@ def call_gemini_api(system_instruction, user_text, use_search):
         timeout=90,
     )
     if not resp.ok:
-        return None, f"Gemini API 錯誤 {resp.status_code}: {resp.text[:500]}"
+        return None, f"Gemini API 錯誤 {resp.status_code}: {resp.text[:500]}", False
     body_json = resp.json()
     candidates = body_json.get("candidates", [])
     if not candidates:
         print(f"[gemini debug] 無 candidates，完整回應: {json.dumps(body_json, ensure_ascii=False)[:1000]}")
-        return None, "Gemini 沒有回傳內容"
+        return None, "Gemini 沒有回傳內容", False
+    finish_reason = candidates[0].get("finishReason")
+    truncated = finish_reason == "MAX_TOKENS"
     parts = candidates[0].get("content", {}).get("parts", [])
     text = "\n".join(p["text"] for p in parts if "text" in p)
     # 偶爾模型會吐出字面上的反斜線+n，而不是真正的換行字元；直接修正掉。
     text = text.replace("\\n", "\n")
     if not text:
-        finish_reason = candidates[0].get("finishReason")
         print(
             f"[gemini debug] 無文字內容，finishReason={finish_reason}，"
             f"candidate: {json.dumps(candidates[0], ensure_ascii=False)[:1000]}"
         )
-    return (text or None), (None if text else "Gemini 沒有回傳文字內容")
+    elif truncated:
+        print(f"[gemini debug] 回應被 maxOutputTokens 截斷 (finishReason=MAX_TOKENS)，長度={len(text)} 字")
+    return (text or None), (None if text else "Gemini 沒有回傳文字內容"), truncated
 
 
 def call_gemini(prompt):
@@ -129,20 +132,30 @@ def call_gemini(prompt):
     # 階段一：讓模型正常查資料、正常寫分析（開 google_search，不逼格式，寫得詳細沒關係）。
     # 實測發現：格式規則和 google_search 工具一起給時，模型幾乎每次都無視格式規則，
     # 寫成長篇報告。與其硬逼一次到位，不如讓它先把研究做好。
-    raw_text, error = call_gemini_api(None, prompt, use_search=True)
+    # max_tokens 給大一點空間 (4096)：這階段是詳細中文長文 + google_search 的 grounding
+    # 內容都算在輸出裡，1024 太容易被硬切斷（曾發生截到一半、句子沒寫完就沒了）。
+    raw_text, error, raw_truncated = call_gemini_api(None, prompt, use_search=True, max_tokens=4096)
     if not raw_text:
         return None, error
 
     # 階段二：另外開一次「純改寫」呼叫，不開搜尋工具，只把階段一的文字壓縮成因果箭頭鏈。
-    # 拿掉搜尋工具的干擾後，格式指令的遵守度大幅提升。
+    # 拿掉搜尋工具的干擾後，格式指令的遵守度大幅提升。COMPRESS_INSTRUCTION 本身就要求輸出
+    # 上限 300 字，1536 給足夠餘裕但不會浪費太多。
     compress_input = (
         f"{raw_text}\n\n---\n"
         "提醒：【投資策略建議】只能是這 5 檔，不可替換成其他代號：QQQM、0050、IAU、00948B、00953B。"
     )
-    compressed_text, error = call_gemini_api(COMPRESS_INSTRUCTION, compress_input, use_search=False)
+    compressed_text, error, compress_truncated = call_gemini_api(
+        COMPRESS_INSTRUCTION, compress_input, use_search=False, max_tokens=1536
+    )
     if not compressed_text:
-        return raw_text, None  # 濃縮失敗就退回原始版本，總比沒有分析好
+        # 濃縮失敗就退回原始版本，總比沒有分析好；但如果原始版本本身也被截斷過，
+        # 要清楚標記出來，不要讓半句話看起來像是正常存檔的完整分析。
+        note = "\n\n⚠️（此版本內容因回應長度限制被截斷，不完整，建議稍後重新分析）" if raw_truncated else ""
+        return raw_text + note, None
 
+    if compress_truncated:
+        compressed_text += "\n\n⚠️（內容可能因長度限制被截斷）"
     return compressed_text, None
 
 
