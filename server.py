@@ -43,6 +43,10 @@ try:
     from ai_keys_local import GROQ_API_KEY
 except ImportError:
     GROQ_API_KEY = ""
+try:
+    from ai_keys_local import TAVILY_API_KEY
+except ImportError:
+    TAVILY_API_KEY = ""
 
 FIELD_LABELS = {
     "vixtwn": "VIXTWN(台股期貨波動率指數)",
@@ -53,24 +57,31 @@ FIELD_LABELS = {
 }
 
 
-def build_prompt():
+def build_data_table():
     entries = json.loads(DATA_FILE.read_text(encoding="utf-8"))
     recent = entries[-10:]
-    table = "\n".join(
+    return "\n".join(
         f"{e['date']}: " + ", ".join(f"{FIELD_LABELS[k]}={e.get(k)}" for k in FIELD_LABELS)
         for e in recent
     )
-    return f"""你是一位總經與跨資產分析師。以下是最近幾天的五項市場指標數據：
 
-{table}
 
-請針對最新一天相對前一天的變化，依序回答：
+ANALYSIS_QUESTIONS = """請針對最新一天相對前一天的變化，依序回答：
 1.【原因】今天變動最明顯的 1-2 項指標，用你查到的最新新聞/事件解釋「為什麼」會這樣變動（例如 OPEC+ 決策、地緣政治、Fed 談話、經濟數據公布等具體原因，不要只是複述數字）。
 2.【傳導】這個變動可能如何牽動其他資產／指數（例如黃金、美元指數、科技股、公債），方向是看漲還是看跌，並說明傳導邏輯。
 3.【投資策略建議】依據這 5 項數據的走勢，針對以下 5 檔標的分別給出具體策略建議：QQQM、0050（台股大盤ETF）、IAU（黃金）、00948B、00953B。
    每一檔請明確給出「緊抱／加碼／減碼／出場」其中一種立場，並說明為什麼（要連回前面①②的因果邏輯）。
 
 請用繁體中文回答，段落分明。"""
+
+
+def build_prompt():
+    table = build_data_table()
+    return f"""你是一位總經與跨資產分析師。以下是最近幾天的五項市場指標數據：
+
+{table}
+
+{ANALYSIS_QUESTIONS}"""
 
 
 COMPRESS_INSTRUCTION = """你的任務是把輸入的總經分析文字，濃縮成精簡的因果箭頭鏈格式，只做濃縮改寫，禁止新增原文沒有的資訊，禁止替換或發明原文沒提到的資產代號。
@@ -138,12 +149,14 @@ def call_groq_api(system_instruction, user_text, max_tokens=1024):
     if not GROQ_API_KEY:
         return None, "尚未設定 GROQ_API_KEY（請在 ai_keys_local.py 填入）", False
 
+    messages = []
+    if system_instruction:
+        messages.append({"role": "system", "content": system_instruction})
+    messages.append({"role": "user", "content": user_text})
+
     body = {
         "model": "llama-3.3-70b-versatile",
-        "messages": [
-            {"role": "system", "content": system_instruction},
-            {"role": "user", "content": user_text},
-        ],
+        "messages": messages,
         "max_tokens": max_tokens,
         "temperature": 0.3,
     }
@@ -170,6 +183,71 @@ def call_groq_api(system_instruction, user_text, max_tokens=1024):
     return (text or None), (None if text else "Groq 沒有回傳文字內容"), truncated
 
 
+def call_tavily_search(query, max_results=5):
+    """Gemini 的 google_search 額度用完時，用這個當替代的搜尋來源。
+    Tavily 回傳的是已經整理過的網頁摘要（title/content/url），可以直接塞進
+    LLM prompt 當作「查到的新聞」使用，不用自己再寫爬蟲/解析 HTML。
+    """
+    if not TAVILY_API_KEY:
+        return None, "尚未設定 TAVILY_API_KEY（請在 ai_keys_local.py 填入）"
+    try:
+        resp = requests.post(
+            "https://api.tavily.com/search",
+            json={
+                "api_key": TAVILY_API_KEY,
+                "query": query,
+                "search_depth": "basic",
+                "max_results": max_results,
+                "include_answer": False,
+            },
+            timeout=30,
+        )
+    except requests.RequestException as e:
+        return None, f"Tavily 連線失敗: {e}"
+    if not resp.ok:
+        return None, f"Tavily API 錯誤 {resp.status_code}: {resp.text[:500]}"
+    results = resp.json().get("results", [])
+    if not results:
+        return None, "Tavily 沒有搜尋到結果"
+    formatted = "\n\n".join(
+        f"【{r.get('title', '')}】\n{r.get('content', '')[:400]}\n來源: {r.get('url', '')}"
+        for r in results
+    )
+    return formatted, None
+
+
+TAVILY_SEARCH_QUERY = "VIX恐慌指數 布蘭特原油 美國10年公債殖利率 高收益債利差 今日財經新聞"
+
+
+def call_stage1_via_tavily_and_groq():
+    """Gemini 的 google_search 額度用完（階段一失敗）時的完整替代路線：
+    自己用 Tavily 查新聞，把查到的內容連同數據表一起交給 Groq 寫階段一分析。
+    跟原本 Gemini 階段一的差別只在「查資料」跟「寫分析」分別由誰做，
+    輸出格式（三段式問答）維持一致，好讓後面的階段二壓縮邏輯不用跟著改。
+    """
+    search_context, error = call_tavily_search(TAVILY_SEARCH_QUERY)
+    if not search_context:
+        return None, f"Tavily 搜尋失敗: {error}"
+
+    table = build_data_table()
+    prompt = f"""你是一位總經與跨資產分析師。以下是最近幾天的五項市場指標數據：
+
+{table}
+
+以下是搜尋到的相關財經新聞片段，可用來解釋「為什麼」指標會這樣變動：
+
+{search_context}
+
+{ANALYSIS_QUESTIONS}"""
+
+    text, error, truncated = call_groq_api(None, prompt, max_tokens=4096)
+    if not text:
+        return None, f"Groq 撰寫階段一分析失敗: {error}"
+    if truncated:
+        text += "\n\n⚠️（內容可能因長度限制被截斷）"
+    return text, None
+
+
 def call_gemini(prompt):
     if not GEMINI_API_KEY:
         return None, "尚未設定 GEMINI_API_KEY（請在 ai_keys_local.py 填入）"
@@ -181,7 +259,13 @@ def call_gemini(prompt):
     # 內容都算在輸出裡，1024 太容易被硬切斷（曾發生截到一半、句子沒寫完就沒了）。
     raw_text, error, raw_truncated = call_gemini_api(None, prompt, use_search=True, max_tokens=4096)
     if not raw_text:
-        return None, error
+        # Gemini 的 google_search 額度通常比模型本身的請求額度小很多，最容易先在
+        # 這裡被打回票。整條線改用 Tavily 查資料 + Groq 寫分析頂上，避免直接失敗。
+        print(f"[gemini debug] 階段一失敗（{error}），改用 Tavily+Groq 頂上")
+        raw_text, fallback_error = call_stage1_via_tavily_and_groq()
+        if not raw_text:
+            return None, f"Gemini 失敗（{error}），Tavily+Groq 備援也失敗（{fallback_error}）"
+        raw_truncated = False
 
     # 階段二：另外開一次「純改寫」呼叫，不開搜尋工具，只把階段一的文字壓縮成因果箭頭鏈。
     # 拿掉搜尋工具的干擾後，格式指令的遵守度大幅提升。COMPRESS_INSTRUCTION 本身就要求輸出
