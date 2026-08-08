@@ -39,6 +39,10 @@ try:
     from ai_keys_local import GEMINI_API_KEY
 except ImportError:
     GEMINI_API_KEY = ""
+try:
+    from ai_keys_local import GROQ_API_KEY
+except ImportError:
+    GROQ_API_KEY = ""
 
 FIELD_LABELS = {
     "vixtwn": "VIXTWN(台股期貨波動率指數)",
@@ -125,6 +129,47 @@ def call_gemini_api(system_instruction, user_text, use_search, max_tokens=1024):
     return (text or None), (None if text else "Gemini 沒有回傳文字內容"), truncated
 
 
+def call_groq_api(system_instruction, user_text, max_tokens=1024):
+    """階段二（純改寫壓縮，不需要搜尋）改用 Groq 跑，分攤掉 Gemini 的 google_search 額度，
+    因為真正卡住免費額度的是階段一那個有開搜尋工具的呼叫，階段二只是文字重排，
+    換去哪家模型都不影響品質，但可以讓 Gemini 的額度只被階段一消耗，用量直接砍半。
+    Groq 的 API 是 OpenAI 相容格式（/chat/completions），不是 Gemini 那種格式。
+    """
+    if not GROQ_API_KEY:
+        return None, "尚未設定 GROQ_API_KEY（請在 ai_keys_local.py 填入）", False
+
+    body = {
+        "model": "llama-3.3-70b-versatile",
+        "messages": [
+            {"role": "system", "content": system_instruction},
+            {"role": "user", "content": user_text},
+        ],
+        "max_tokens": max_tokens,
+        "temperature": 0.3,
+    }
+    resp = requests.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+        json=body,
+        timeout=60,
+    )
+    if not resp.ok:
+        return None, f"Groq API 錯誤 {resp.status_code}: {resp.text[:500]}", False
+    body_json = resp.json()
+    choices = body_json.get("choices", [])
+    if not choices:
+        print(f"[groq debug] 無 choices，完整回應: {json.dumps(body_json, ensure_ascii=False)[:1000]}")
+        return None, "Groq 沒有回傳內容", False
+    finish_reason = choices[0].get("finish_reason")
+    truncated = finish_reason == "length"
+    text = (choices[0].get("message", {}) or {}).get("content", "") or ""
+    if not text:
+        print(f"[groq debug] 無文字內容，finish_reason={finish_reason}")
+    elif truncated:
+        print(f"[groq debug] 回應被 max_tokens 截斷 (finish_reason=length)，長度={len(text)} 字")
+    return (text or None), (None if text else "Groq 沒有回傳文字內容"), truncated
+
+
 def call_gemini(prompt):
     if not GEMINI_API_KEY:
         return None, "尚未設定 GEMINI_API_KEY（請在 ai_keys_local.py 填入）"
@@ -141,13 +186,21 @@ def call_gemini(prompt):
     # 階段二：另外開一次「純改寫」呼叫，不開搜尋工具，只把階段一的文字壓縮成因果箭頭鏈。
     # 拿掉搜尋工具的干擾後，格式指令的遵守度大幅提升。COMPRESS_INSTRUCTION 本身就要求輸出
     # 上限 300 字，1536 給足夠餘裕但不會浪費太多。
+    # 這段不需要搜尋，改丟給 Groq（免費、快）跑，真正卡免費額度的是階段一的
+    # google_search 呼叫，讓階段二完全不碰 Gemini，等於把 Gemini 用量砍半。
+    # Groq 沒設定 key 或臨時出錯時，退回原本用 Gemini 跑這段，不會整條線斷掉。
     compress_input = (
         f"{raw_text}\n\n---\n"
         "提醒：【投資策略建議】只能是這 5 檔，不可替換成其他代號：QQQM、0050、IAU、00948B、00953B。"
     )
-    compressed_text, error, compress_truncated = call_gemini_api(
-        COMPRESS_INSTRUCTION, compress_input, use_search=False, max_tokens=1536
+    compressed_text, error, compress_truncated = call_groq_api(
+        COMPRESS_INSTRUCTION, compress_input, max_tokens=1536
     )
+    if not compressed_text:
+        print(f"[groq debug] 階段二改用 Groq 失敗（{error}），退回用 Gemini 跑這段")
+        compressed_text, error, compress_truncated = call_gemini_api(
+            COMPRESS_INSTRUCTION, compress_input, use_search=False, max_tokens=1536
+        )
     if not compressed_text:
         # 濃縮失敗就退回原始版本，總比沒有分析好；但如果原始版本本身也被截斷過，
         # 要清楚標記出來，不要讓半句話看起來像是正常存檔的完整分析。
