@@ -1262,11 +1262,32 @@
       }).join('');
     }
 
+    const ANALYSIS_COOLDOWN_MS = 30000; // 完成後至少要等這麼久才能再按一次，避免連續呼叫 Gemini/連續 git commit
+    const analysisButtonLabel = {};
+
+    function startAnalysisCooldown(provider) {
+      const btn = document.getElementById(`analyze-${provider}-btn`);
+      const until = Date.now() + ANALYSIS_COOLDOWN_MS;
+      btn.disabled = true;
+      const tick = () => {
+        const remain = Math.ceil((until - Date.now()) / 1000);
+        if (remain <= 0) {
+          btn.disabled = false;
+          btn.textContent = analysisButtonLabel[provider];
+          return;
+        }
+        btn.textContent = `⏳ 請稍候 ${remain} 秒`;
+        setTimeout(tick, 500);
+      };
+      tick();
+    }
+
     async function runAnalysis(provider) {
       const btn = document.getElementById(`analyze-${provider}-btn`);
       const statusEl = document.getElementById(`${provider}-status`);
       const resultEl = document.getElementById(`${provider}-result`);
       if (btn.disabled) return;
+      if (!analysisButtonLabel[provider]) analysisButtonLabel[provider] = btn.textContent;
       btn.disabled = true;
       statusEl.textContent = '⏳ 分析中...(可能需要 10~30 秒)';
       try {
@@ -1274,14 +1295,15 @@
         const data = await resp.json();
         if (data.ok) {
           resultEl.textContent = data.text;
-          statusEl.textContent = '✅ 完成 ' + new Date().toLocaleString('zh-TW');
+          statusEl.textContent = '✅ 完成 ' + new Date().toLocaleString('zh-TW')
+            + (data.syncError ? ' ｜ ⚠️ ' + data.syncError : '');
         } else {
           statusEl.textContent = '❌ ' + (data.error || '未知錯誤');
         }
       } catch (e) {
         statusEl.textContent = '❌ 無法連線本機伺服器 API（請確認是用 update.bat 開啟的網頁，不是直接雙擊 html）: ' + e.message;
       } finally {
-        btn.disabled = false;
+        startAnalysisCooldown(provider);
       }
     }
 

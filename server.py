@@ -166,6 +166,18 @@ def save_notify_config(cfg):
 
 
 def save_analysis(provider, text):
+    """寫入分析結果並同步到 git，讓兩台電腦都看得到同一份最新結果。
+
+    做法跟 save_notify_config() 一樣：先 pull 再寫檔再 commit/push，
+    避免像之前那樣把檔案改成「已追蹤但沒 commit」的懸空狀態，
+    導致下次 update.bat 的 git pull --rebase 卡住。
+    回傳 None 代表全部成功；否則回傳一則可以直接顯示給使用者看的錯誤說明
+    （分析結果本身已經寫進本機檔案，不會因為同步失敗而遺失）。
+    """
+    pull = subprocess.run(["git", "pull", "--rebase"], cwd=DIR, capture_output=True, text=True)
+    if pull.returncode != 0:
+        return f"git pull 失敗，本次分析結果只存在本機、尚未同步: {pull.stderr.strip()}"
+
     data = {}
     if ANALYSIS_FILE.exists():
         try:
@@ -177,6 +189,19 @@ def save_analysis(provider, text):
         "generatedAt": datetime.now().astimezone().isoformat(timespec="seconds"),
     }
     ANALYSIS_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    subprocess.run(["git", "add", "macro_analysis.json"], cwd=DIR, capture_output=True, text=True)
+    commit = subprocess.run(
+        ["git", "commit", "-m", f"Update {provider} macro analysis"], cwd=DIR, capture_output=True, text=True
+    )
+    commit_output = commit.stdout + commit.stderr
+    nothing_changed = "nothing to commit" in commit_output or "nothing added to commit" in commit_output
+    if commit.returncode != 0 and not nothing_changed:
+        return f"已存到本機，但 git commit 失敗: {commit.stderr.strip()}"
+    push = subprocess.run(["git", "push"], cwd=DIR, capture_output=True, text=True)
+    if push.returncode != 0:
+        return f"已存到本機並 commit，但 git push 失敗（請手動執行 push.bat）: {push.stderr.strip()}"
+    return None
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -231,10 +256,11 @@ class Handler(SimpleHTTPRequestHandler):
         else:
             text, error = None, f"未知的 provider: {provider}"
 
-        if text:
-            save_analysis(provider, text)
+        sync_error = save_analysis(provider, text) if text else None
 
-        body = json.dumps({"ok": bool(text), "text": text, "error": error}, ensure_ascii=False).encode("utf-8")
+        body = json.dumps(
+            {"ok": bool(text), "text": text, "error": error, "syncError": sync_error}, ensure_ascii=False
+        ).encode("utf-8")
         self.send_response(200 if text else 500)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
