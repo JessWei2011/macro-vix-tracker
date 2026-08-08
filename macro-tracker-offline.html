@@ -724,6 +724,8 @@
       <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
         <button class="btn btn-primary" id="analyze-gemini-btn">🔵 用 Gemini 分析</button>
         <button class="btn btn-secondary" id="toggle-gemini-result-btn">📖 展開分析結果</button>
+        <button class="btn btn-secondary" id="analyze-fallback-btn" title="跳過 Gemini，直接測試 Tavily 搜尋 + Groq 分析這條備援線">🟠 測試備援方案 (Tavily+Groq)</button>
+        <button class="btn btn-secondary" id="toggle-fallback-result-btn">📖 展開備援結果</button>
       </div>
       <div class="board-card" id="gemini-result-panel" style="display:none;">
         <div class="board-title">
@@ -731,6 +733,13 @@
           <span class="status-msg" id="gemini-status" style="font-size:14px;"></span>
         </div>
         <div id="gemini-result" style="white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; max-width:100%; font-size:19px; line-height:1.9; color: var(--text-main);">尚未產生分析。</div>
+      </div>
+      <div class="board-card" id="fallback-result-panel" style="display:none; margin-top:12px;">
+        <div class="board-title">
+          <span>備援 (Tavily+Groq)</span>
+          <span class="status-msg" id="fallback-status" style="font-size:14px;"></span>
+        </div>
+        <div id="fallback-result" style="white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; max-width:100%; font-size:19px; line-height:1.9; color: var(--text-main);">尚未產生分析。</div>
       </div>
     </div>
 
@@ -1308,14 +1317,19 @@
     }
 
     document.getElementById('analyze-gemini-btn').addEventListener('click', () => runAnalysis('gemini'));
+    document.getElementById('analyze-fallback-btn').addEventListener('click', () => runAnalysis('fallback'));
 
-    document.getElementById('toggle-gemini-result-btn').addEventListener('click', () => {
-      const panel = document.getElementById('gemini-result-panel');
-      const btn = document.getElementById('toggle-gemini-result-btn');
-      const isHidden = panel.style.display === 'none';
-      panel.style.display = isHidden ? 'block' : 'none';
-      btn.textContent = isHidden ? '📕 收起分析結果' : '📖 展開分析結果';
-    });
+    function setupToggleResultBtn(toggleBtnId, panelId, showLabel, hideLabel) {
+      document.getElementById(toggleBtnId).addEventListener('click', () => {
+        const panel = document.getElementById(panelId);
+        const btn = document.getElementById(toggleBtnId);
+        const isHidden = panel.style.display === 'none';
+        panel.style.display = isHidden ? 'block' : 'none';
+        btn.textContent = isHidden ? hideLabel : showLabel;
+      });
+    }
+    setupToggleResultBtn('toggle-gemini-result-btn', 'gemini-result-panel', '📖 展開分析結果', '📕 收起分析結果');
+    setupToggleResultBtn('toggle-fallback-result-btn', 'fallback-result-panel', '📖 展開備援結果', '📕 收起備援結果');
 
     document.getElementById('shutdown-server-btn').addEventListener('click', async () => {
       try {
@@ -1332,7 +1346,7 @@
         const resp = await fetch('./macro_analysis.json?t=' + Date.now());
         if (!resp.ok) return;
         const data = await resp.json();
-        ['gemini'].forEach(p => {
+        ['gemini', 'fallback'].forEach(p => {
           if (data[p]) {
             document.getElementById(`${p}-result`).textContent = data[p].text;
             document.getElementById(`${p}-status`).textContent = '📅 上次產生: ' + data[p].generatedAt;

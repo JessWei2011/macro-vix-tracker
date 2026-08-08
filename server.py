@@ -87,16 +87,18 @@ def build_prompt():
 COMPRESS_INSTRUCTION = """你的任務是把輸入的總經分析文字，濃縮成精簡的因果箭頭鏈格式，只做濃縮改寫，禁止新增原文沒有的資訊，禁止替換或發明原文沒提到的資產代號。
 
 【格式規則，違反視為失敗】
-- 每一個論點寫成一行：事件 --> 中間結果 --> 中間結果 --> 最終結論，3~5 個節點，整行不超過 40 個字。
+- 每一個論點寫成一行：事件 --> 中間結果 --> 中間結果 --> 最終結論，硬性規定至少 3 個節點（起點+至少1個中間傳導機制+結論），整行不超過 40 個字。
+- 嚴禁退化成只有 2 個節點的寫法，例如「科技股 --> 看跌」這種跳過中間推理、只剩結論的寫法一律視為失敗，必須補回原文中「為什麼」的那個中間節點（例如殖利率上升／原油上漲／通膨預期等具體傳導機制），讓讀者不用回頭看原文也知道為什麼。
 - 範例：📈 科技股（QQQM）: 原油上漲 --> 增加企業運營成本 --> 高通膨高利率 --> 不利科技股 --> QQQM看跌 📉
 - 節點只能是名詞或極短詞組，不准有「可能」「因此」「顯示」等連接詞或完整句子，不准在箭頭鏈後面加冒號解釋。
+- 同一個資產／指數如果在不同行出現方向不同的結論（例如科技股一行看跌、另一行又看漲），兩行的中間節點必須分別點出各自不同的驅動因子，讓讀者看得出兩行在講不同的傳導路徑、不是互相矛盾；不能兩行都只寫「資產 --> 方向」導致看起來像是同一件事却給出相反答案。
 - 保留原文的三個段落標題，並在標題前加對應 emoji：🔍【原因】、🔗【傳導】、💰【投資策略建議】。
 - 【傳導】每一行結尾是看漲就加 📈，看跌就加 📉。
 - 每一行開頭依內容性質加一個情境 emoji（自行判斷語意選用，例如地緣政治用 🌍、Fed/利率用 🏦、油價用 🛢️、恐慌情緒用 😨、黃金用 🥇、科技股用 💻，不要每行都用同一個）。
 - 第三段【投資策略建議】只能包含這 5 檔，逐一列出、順序不變、代號不可更改替換：QQQM、0050、IAU、00948B、00953B。每檔一行，結尾保留「緊抱／加碼／減碼／出場」其中一種立場，並依立場在最前面加 emoji：🟢加碼、🟡緊抱、🔴減碼、⚫出場。
 - 不要開場白、不要總結、不要客套話，只留三個標題加項目符號。
 - 輸出必須用真正的換行分隔每一行，絕對不要輸出字面上的反斜線加n（\\n）這種字元。
-- 整份輸出字數上限 300 字（不含 emoji）。
+- 整份輸出字數上限 400 字（不含 emoji）——比原本上限多留一點空間，因為保留中間推理節點會比之前的極簡版本多佔一些字數，不要為了硬壓字數又把節點砍回 2 個。
 
 用繁體中文輸出。"""
 
@@ -248,31 +250,10 @@ def call_stage1_via_tavily_and_groq():
     return text, None
 
 
-def call_gemini(prompt):
-    if not GEMINI_API_KEY:
-        return None, "尚未設定 GEMINI_API_KEY（請在 ai_keys_local.py 填入）"
-
-    # 階段一：讓模型正常查資料、正常寫分析（開 google_search，不逼格式，寫得詳細沒關係）。
-    # 實測發現：格式規則和 google_search 工具一起給時，模型幾乎每次都無視格式規則，
-    # 寫成長篇報告。與其硬逼一次到位，不如讓它先把研究做好。
-    # max_tokens 給大一點空間 (4096)：這階段是詳細中文長文 + google_search 的 grounding
-    # 內容都算在輸出裡，1024 太容易被硬切斷（曾發生截到一半、句子沒寫完就沒了）。
-    raw_text, error, raw_truncated = call_gemini_api(None, prompt, use_search=True, max_tokens=4096)
-    if not raw_text:
-        # Gemini 的 google_search 額度通常比模型本身的請求額度小很多，最容易先在
-        # 這裡被打回票。整條線改用 Tavily 查資料 + Groq 寫分析頂上，避免直接失敗。
-        print(f"[gemini debug] 階段一失敗（{error}），改用 Tavily+Groq 頂上")
-        raw_text, fallback_error = call_stage1_via_tavily_and_groq()
-        if not raw_text:
-            return None, f"Gemini 失敗（{error}），Tavily+Groq 備援也失敗（{fallback_error}）"
-        raw_truncated = False
-
-    # 階段二：另外開一次「純改寫」呼叫，不開搜尋工具，只把階段一的文字壓縮成因果箭頭鏈。
-    # 拿掉搜尋工具的干擾後，格式指令的遵守度大幅提升。COMPRESS_INSTRUCTION 本身就要求輸出
-    # 上限 300 字，1536 給足夠餘裕但不會浪費太多。
-    # 這段不需要搜尋，改丟給 Groq（免費、快）跑，真正卡免費額度的是階段一的
-    # google_search 呼叫，讓階段二完全不碰 Gemini，等於把 Gemini 用量砍半。
-    # Groq 沒設定 key 或臨時出錯時，退回原本用 Gemini 跑這段，不會整條線斷掉。
+def compress_to_arrow_chain(raw_text, raw_truncated=False):
+    """階段二：把階段一寫好的長文壓縮成因果箭頭鏈格式，Gemini/Tavily+Groq 兩條路線
+    到這裡都共用同一段邏輯。優先用 Groq（免搜尋、免占用 Gemini 額度），失敗才退回 Gemini。
+    """
     compress_input = (
         f"{raw_text}\n\n---\n"
         "提醒：【投資策略建議】只能是這 5 檔，不可替換成其他代號：QQQM、0050、IAU、00948B、00953B。"
@@ -294,6 +275,38 @@ def call_gemini(prompt):
     if compress_truncated:
         compressed_text += "\n\n⚠️（內容可能因長度限制被截斷）"
     return compressed_text, None
+
+
+def call_gemini(prompt):
+    if not GEMINI_API_KEY:
+        return None, "尚未設定 GEMINI_API_KEY（請在 ai_keys_local.py 填入）"
+
+    # 階段一：讓模型正常查資料、正常寫分析（開 google_search，不逼格式，寫得詳細沒關係）。
+    # 實測發現：格式規則和 google_search 工具一起給時，模型幾乎每次都無視格式規則，
+    # 寫成長篇報告。與其硬逼一次到位，不如讓它先把研究做好。
+    # max_tokens 給大一點空間 (4096)：這階段是詳細中文長文 + google_search 的 grounding
+    # 內容都算在輸出裡，1024 太容易被硬切斷（曾發生截到一半、句子沒寫完就沒了）。
+    raw_text, error, raw_truncated = call_gemini_api(None, prompt, use_search=True, max_tokens=4096)
+    if not raw_text:
+        # Gemini 的 google_search 額度通常比模型本身的請求額度小很多，最容易先在
+        # 這裡被打回票。整條線改用 Tavily 查資料 + Groq 寫分析頂上，避免直接失敗。
+        print(f"[gemini debug] 階段一失敗（{error}），改用 Tavily+Groq 頂上")
+        raw_text, fallback_error = call_stage1_via_tavily_and_groq()
+        if not raw_text:
+            return None, f"Gemini 失敗（{error}），Tavily+Groq 備援也失敗（{fallback_error}）"
+        raw_truncated = False
+
+    return compress_to_arrow_chain(raw_text, raw_truncated)
+
+
+def run_fallback_analysis():
+    """給「測試備援方案」按鈕用：跳過 Gemini，直接測試 Tavily+Groq 那條線，
+    好在不動用 Gemini 額度的情況下驗證備援路線本身是否正常運作。
+    """
+    raw_text, error = call_stage1_via_tavily_and_groq()
+    if not raw_text:
+        return None, error
+    return compress_to_arrow_chain(raw_text)
 
 
 def save_notify_config(cfg):
@@ -319,15 +332,14 @@ def save_analysis(provider, text):
     """寫入分析結果並同步到 git，讓兩台電腦都看得到同一份最新結果。
 
     做法跟 save_notify_config() 一樣：先 pull 再寫檔再 commit/push，
-    避免像之前那樣把檔案改成「已追蹤但沒 commit」的懸空狀態，
-    導致下次 update.bat 的 git pull --rebase 卡住。
-    回傳 None 代表全部成功；否則回傳一則可以直接顯示給使用者看的錯誤說明
-    （分析結果本身已經寫進本機檔案，不會因為同步失敗而遺失）。
+    先寫本機檔案，寫完才碰 git（commit -> pull --rebase -> push），這樣不管後面
+    git 發生什麼事，這次分析結果都已經真的存進 macro_analysis.json，不會憑空消失。
+    commit 放在 pull 前面是刻意的：本機這次的變更先進一個 commit，「pull --rebase」
+    才有東西可以疊在遠端新 commit 上面重放，不會再卡「working tree 有未提交變更」
+    這個之前踩過的坑。
+    回傳 None 代表全部成功（本機+同步都完成）；否則回傳一則可以直接顯示給使用者看
+    的錯誤說明，但無論如何本機檔案這時已經寫好了。
     """
-    pull = subprocess.run(["git", "pull", "--rebase"], cwd=DIR, capture_output=True, text=True)
-    if pull.returncode != 0:
-        return f"git pull 失敗，本次分析結果只存在本機、尚未同步: {pull.stderr.strip()}"
-
     data = {}
     if ANALYSIS_FILE.exists():
         try:
@@ -348,6 +360,11 @@ def save_analysis(provider, text):
     nothing_changed = "nothing to commit" in commit_output or "nothing added to commit" in commit_output
     if commit.returncode != 0 and not nothing_changed:
         return f"已存到本機，但 git commit 失敗: {commit.stderr.strip()}"
+
+    pull = subprocess.run(["git", "pull", "--rebase"], cwd=DIR, capture_output=True, text=True)
+    if pull.returncode != 0:
+        return f"已存到本機並 commit，但 git pull --rebase 失敗（可能跟遠端衝突，請手動處理）: {pull.stderr.strip()}"
+
     push = subprocess.run(["git", "push"], cwd=DIR, capture_output=True, text=True)
     if push.returncode != 0:
         return f"已存到本機並 commit，但 git push 失敗（請手動執行 push.bat）: {push.stderr.strip()}"
@@ -403,6 +420,8 @@ class Handler(SimpleHTTPRequestHandler):
         prompt = build_prompt()
         if provider == "gemini":
             text, error = call_gemini(prompt)
+        elif provider == "fallback":
+            text, error = run_fallback_analysis()
         else:
             text, error = None, f"未知的 provider: {provider}"
 
