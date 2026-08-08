@@ -12,6 +12,7 @@ Two jobs:
 """
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -95,10 +96,14 @@ COMPRESS_INSTRUCTION = """你的任務是把輸入的總經分析文字，濃縮
 - 保留原文的三個段落標題，並在標題前加對應 emoji：🔍【原因】、🔗【傳導】、💰【投資策略建議】。
 - 【傳導】每一行結尾是看漲就加 📈，看跌就加 📉。
 - 每一行開頭依內容性質加一個情境 emoji（自行判斷語意選用，例如地緣政治用 🌍、Fed/利率用 🏦、油價用 🛢️、恐慌情緒用 😨、黃金用 🥇、科技股用 💻，不要每行都用同一個）。
-- 第三段【投資策略建議】只能包含這 5 檔，逐一列出、順序不變、代號不可更改替換：QQQM、0050、IAU、00948B、00953B。每檔一行，結尾保留「緊抱／加碼／減碼／出場」其中一種立場，並依立場在最前面加 emoji：🟢加碼、🟡緊抱、🔴減碼、⚫出場。
+- 第三段【投資策略建議】只能包含這 5 檔，逐一列出、順序不變、代號不可更改替換：QQQM、0050、IAU、00948B、00953B。每檔一行，格式是「emoji 代號 立場（3~8字關鍵理由）」，立場只能是「緊抱／加碼／減碼／出場」其中一種，並依立場在最前面加 emoji：🟢加碼、🟡緊抱、🔴減碼、⚫出場。
+- 【投資策略建議】嚴禁幻覺：括號裡的關鍵理由必須是前面【原因】【傳導】兩段實際出現過的因果節點，不准為了湊格式編造原文沒提過的理由。這條規則沒有例外，括號絕對不能省略。
+- 如果原文對某檔標的完全沒有給出具體驅動因子，就照實寫「🟡 IAU 緊抱（原文未討論，僅供參考）」這種格式老實承認沒依據，不准硬掰一個看起來煞有其事、但其實原文完全沒出現過的立場或理由，也不准直接省略括號蒙混過去。
+- 正確範例：🟢 0050 加碼（風險偏好回升）／🔴 IAU 減碼（美元走強承壓）／🟡 IAU 緊抱（原文未討論，僅供參考）
+- 錯誤範例（絕對不要這樣寫，沒有括號說明理由視為違反格式規則）：🟢 IAU 加碼
 - 不要開場白、不要總結、不要客套話，只留三個標題加項目符號。
 - 輸出必須用真正的換行分隔每一行，絕對不要輸出字面上的反斜線加n（\\n）這種字元。
-- 整份輸出字數上限 400 字（不含 emoji）——比原本上限多留一點空間，因為保留中間推理節點會比之前的極簡版本多佔一些字數，不要為了硬壓字數又把節點砍回 2 個。
+- 整份輸出字數上限 450 字（不含 emoji）——比原本上限多留一點空間，因為保留中間推理節點跟投資建議的關鍵理由會比之前的極簡版本多佔一些字數，不要為了硬壓字數又把節點砍回 2 個或把理由拿掉。
 
 用繁體中文輸出。"""
 
@@ -218,7 +223,13 @@ def call_tavily_search(query, max_results=5):
     return formatted, None
 
 
-TAVILY_SEARCH_QUERY = "VIX恐慌指數 布蘭特原油 美國10年公債殖利率 高收益債利差 今日財經新聞"
+TAVILY_SEARCH_QUERIES = [
+    "VIX恐慌指數 布蘭特原油 美國10年公債殖利率 高收益債利差 今日財經新聞",
+    # 單獨開一個查詢專門找 Fed 降息機率／就業數據這類「利率預期」催化劑，因為
+    # 這類新聞常常是黃金、美元、公債同時變動的關鍵驅動，但不見得會被上面那組
+    # 偏指標名稱的關鍵字搜到（實測就漏掉過一次非農就業→降息機率→黃金上漲的鏈）。
+    "Fed 聯準會 降息機率 非農就業 CPI 通膨 最新消息",
+]
 
 
 def call_stage1_via_tavily_and_groq():
@@ -227,9 +238,16 @@ def call_stage1_via_tavily_and_groq():
     跟原本 Gemini 階段一的差別只在「查資料」跟「寫分析」分別由誰做，
     輸出格式（三段式問答）維持一致，好讓後面的階段二壓縮邏輯不用跟著改。
     """
-    search_context, error = call_tavily_search(TAVILY_SEARCH_QUERY)
-    if not search_context:
-        return None, f"Tavily 搜尋失敗: {error}"
+    search_contexts = []
+    for query in TAVILY_SEARCH_QUERIES:
+        context, error = call_tavily_search(query)
+        if context:
+            search_contexts.append(context)
+        else:
+            print(f"[tavily debug] 查詢「{query}」失敗（{error}），跳過這條，繼續用其他查詢結果")
+    if not search_contexts:
+        return None, "Tavily 搜尋全部失敗"
+    search_context = "\n\n".join(search_contexts)
 
     table = build_data_table()
     prompt = f"""你是一位總經與跨資產分析師。以下是最近幾天的五項市場指標數據：
@@ -248,6 +266,24 @@ def call_stage1_via_tavily_and_groq():
     if truncated:
         text += "\n\n⚠️（內容可能因長度限制被截斷）"
     return text, None
+
+
+STANCE_LINE_RE = re.compile(r"^[🟢🟡🔴⚫]\s*\S+\s+(緊抱|加碼|減碼|出場)\s*$")
+
+
+def flag_ungrounded_investment_lines(text):
+    """COMPRESS_INSTRUCTION 已經要求【投資策略建議】每一行都要附括號理由，
+    但實測發現 Groq/Gemini 都不是每次乖乖照做——尤其原文本身就沒給某檔標的
+    理由時，模型常常直接照抄成一行光禿禿的立場（例如「🟢 IAU 加碼」），
+    看起來像是有憑有據，其實原文根本沒討論過。與其靠 prompt 硬凹到 100%
+    遵守，這裡直接用程式碼掃過一遍：沒有括號理由的立場行，強制補上警語，
+    確保絕對不會有「看起來像有根據、其實沒有」的立場漏網。
+    """
+    lines = text.split("\n")
+    for i, line in enumerate(lines):
+        if STANCE_LINE_RE.match(line.strip()):
+            lines[i] = line.rstrip() + "（原文未充分討論，僅供參考）"
+    return "\n".join(lines)
 
 
 def compress_to_arrow_chain(raw_text, raw_truncated=False):
@@ -274,6 +310,7 @@ def compress_to_arrow_chain(raw_text, raw_truncated=False):
 
     if compress_truncated:
         compressed_text += "\n\n⚠️（內容可能因長度限制被截斷）"
+    compressed_text = flag_ungrounded_investment_lines(compressed_text)
     return compressed_text, None
 
 
