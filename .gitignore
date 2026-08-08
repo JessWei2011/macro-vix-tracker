@@ -2,3 +2,4 @@ config_local.py
 ai_keys_local.py
 __pycache__/
 *.pyc
+macro_analysis.json
