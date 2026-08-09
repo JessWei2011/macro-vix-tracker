@@ -83,6 +83,11 @@ def fetch_us10y():
     return (round(val, 3), asof) if val is not None else (None, None)
 
 
+def fetch_dxy():
+    val, asof = fetch_yfinance_last_close("DX-Y.NYB")
+    return (round(val, 2), asof) if val is not None else (None, None)
+
+
 def fetch_spread():
     if not FRED_API_KEY:
         print("[警告] 找不到 FRED_API_KEY (config_local.py)，略過 spread")
@@ -138,7 +143,7 @@ def get_expected_asof(key, now):
     h = now.hour
     if key == "vixtwn":
         return (today if h >= 14 else today - timedelta(days=1)).isoformat()
-    if key in ("vix", "us10y"):
+    if key in ("vix", "us10y", "dxy"):
         return (today - timedelta(days=1) if h >= 4 else today - timedelta(days=2)).isoformat()
     if key == "oil":
         return (today - timedelta(days=1) if h >= 5 else today - timedelta(days=2)).isoformat()
@@ -160,11 +165,15 @@ def main():
         "oil": fetch_oil(),
         "us10y": fetch_us10y(),
         "spread": fetch_spread(),
+        "dxy": fetch_dxy(),
     }
 
     entry = next((e for e in entries if e["date"] == today), None)
     if entry is None:
-        entry = {"date": today, "vixtwn": None, "vix": None, "oil": None, "us10y": None, "spread": None}
+        entry = {
+            "date": today, "vixtwn": None, "vix": None, "oil": None,
+            "us10y": None, "spread": None, "dxy": None,
+        }
         entries.append(entry)
 
     meta = entry.get("_meta", {})
