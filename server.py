@@ -430,6 +430,29 @@ def build_arbitration_prompt():
 
 
 GIT_LOCK = threading.Lock()
+GIT_PULL_MAX_RETRIES = 2
+GIT_PULL_RETRY_WAIT = 1.5  # 秒
+
+
+def _git_pull_rebase_with_retry(cwd):
+    """git pull --rebase 偶爾會撞上「同一時間有另一個 process 也在動這個 repo」的暫時性衝突
+    （例如 update_macro_data.py 的自動同步、或另一台電腦剛好也在 push），常見症狀就是
+    FETCH_HEAD 被讀到一半的狀態，跳出 "Cannot rebase onto multiple branches" 這類跟遠端
+    真實內容衝突無關的錯誤。這種情況本身沒有需要解決的衝突，等一下重試通常就會自己好。
+    GIT_LOCK 只能防住同一個 server.py process 裡的請求互撞，防不住外部的
+    update_macro_data.py，所以這裡额外加重試而不是只靠鎖。
+    """
+    result = None
+    for attempt in range(GIT_PULL_MAX_RETRIES + 1):
+        result = subprocess.run(["git", "pull", "--rebase"], cwd=cwd, capture_output=True, text=True)
+        if result.returncode == 0 or attempt == GIT_PULL_MAX_RETRIES:
+            break
+        print(
+            f"[git debug] pull --rebase 失敗，{GIT_PULL_RETRY_WAIT} 秒後重試 "
+            f"(第 {attempt + 1}/{GIT_PULL_MAX_RETRIES} 次): {result.stderr.strip()}"
+        )
+        time.sleep(GIT_PULL_RETRY_WAIT)
+    return result
 
 
 def save_notify_config(cfg):
@@ -438,7 +461,7 @@ def save_notify_config(cfg):
 
 
 def _save_notify_config_locked(cfg):
-    result = subprocess.run(["git", "pull", "--rebase"], cwd=DIR, capture_output=True, text=True)
+    result = _git_pull_rebase_with_retry(DIR)
     if result.returncode != 0:
         return f"git pull 失敗，未儲存（請手動處理後重新整理頁面重試）: {result.stderr.strip()}"
     NOTIFY_CONFIG_FILE.write_text(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -499,7 +522,7 @@ def _save_analysis_locked(provider, text, raw_text):
     if commit.returncode != 0 and not nothing_changed:
         return f"已存到本機，但 git commit 失敗: {commit.stderr.strip()}"
 
-    pull = subprocess.run(["git", "pull", "--rebase"], cwd=DIR, capture_output=True, text=True)
+    pull = _git_pull_rebase_with_retry(DIR)
     if pull.returncode != 0:
         return f"已存到本機並 commit，但 git pull --rebase 失敗（可能跟遠端衝突，請手動處理）: {pull.stderr.strip()}"
 

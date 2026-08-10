@@ -7,6 +7,7 @@ blanks a field with None), then commits and pushes.
 import json
 import subprocess
 import sys
+import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -29,12 +30,25 @@ def run_git(*args):
     return result.returncode, result.stdout.strip(), result.stderr.strip()
 
 
+GIT_PULL_MAX_RETRIES = 2
+GIT_PULL_RETRY_WAIT = 1.5  # 秒
+
+
 def git_pull():
-    code, out, err = run_git("pull", "--rebase")
-    if code != 0:
-        print(f"[警告] git pull 失敗，請手動處理後再重跑:\n{err}")
-        sys.exit(1)
-    print(f"[git pull] {out or 'up to date'}")
+    """pull --rebase 偶爾會撞上「同一時間 server.py 也在存分析結果」的暫時性衝突
+    （像是 FETCH_HEAD 被讀到一半），常見症狀是 "Cannot rebase onto multiple branches"
+    這種跟遠端真實內容衝突無關的錯誤，等一下重試通常就會自己好。
+    """
+    for attempt in range(GIT_PULL_MAX_RETRIES + 1):
+        code, out, err = run_git("pull", "--rebase")
+        if code == 0:
+            print(f"[git pull] {out or 'up to date'}")
+            return
+        if attempt == GIT_PULL_MAX_RETRIES:
+            print(f"[警告] git pull 失敗，請手動處理後再重跑:\n{err}")
+            sys.exit(1)
+        print(f"[git pull] 失敗，{GIT_PULL_RETRY_WAIT} 秒後重試 (第 {attempt + 1}/{GIT_PULL_MAX_RETRIES} 次): {err}")
+        time.sleep(GIT_PULL_RETRY_WAIT)
 
 
 def git_commit_and_push(today):
