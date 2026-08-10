@@ -229,6 +229,32 @@
       border-color: var(--accent);
     }
 
+    .analysis-columns {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 850px) {
+      .analysis-columns {
+        grid-template-columns: 1fr;
+      }
+    }
+    .analysis-column {
+      background-color: #1c1f2a;
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .analysis-text {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      max-width: 100%;
+      font-size: 17px;
+      line-height: 1.8;
+      color: var(--text-main);
+    }
+
     /* 2. 燈號區 (雙市場恐慌燈號戰情室) */
     .indicator-boards-grid {
       display: grid;
@@ -739,23 +765,31 @@
 
     </div>
 
-    <!-- 【區塊 2.5】：AI 總經分析 (Gemini / 備援共用同一個顯示區，用上面的小按鈕切換) -->
+    <!-- 【區塊 2.5】：AI 總經分析（G+G 與 T+G 兩條線並排比對，用仲裁 Prompt 送去網頁版 AI 裁決） -->
     <div class="entry-card">
       <div class="card-title">🤖 AI 總經分析（因果解讀，不是數字整理）</div>
       <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
-        <button class="btn btn-primary" id="analyze-gemini-btn">🔵 用 Gemini 分析</button>
-        <button class="btn btn-secondary" id="analyze-fallback-btn" title="跳過 Gemini，直接測試 Tavily 搜尋 + Groq 分析這條備援線">🟠 測試備援方案 (Tavily+Groq)</button>
         <button class="btn btn-secondary" id="toggle-result-panel-btn">📖 展開分析結果</button>
+        <button class="btn btn-primary" id="arbitration-prompt-btn" title="把兩條線的分析原文與數據整理成仲裁用 prompt，自動複製到剪貼簿；貼到網頁版 AI（建議 Perplexity 或 Gemini，兩者都有即時搜尋能力）幫你仲裁誰比較可信">⚖️ 仲裁 Prompt</button>
       </div>
       <div class="board-card" id="result-panel" style="display:none;">
-        <div style="display:flex; gap:8px; margin-bottom:14px;">
-          <button class="result-tab-btn active" id="tab-gemini-btn" data-provider="gemini">🔵 Gemini</button>
-          <button class="result-tab-btn" id="tab-fallback-btn" data-provider="fallback">🟠 備援 (Tavily+Groq)</button>
+        <div class="analysis-columns">
+          <div class="analysis-column">
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+              <button class="btn btn-primary" id="analyze-gemini-btn">🔵 Gemini+Groq</button>
+              <span class="status-msg" id="analysis-status-gemini" style="font-size:13px;"></span>
+            </div>
+            <div id="analysis-result-gemini" class="analysis-text">尚未產生分析。</div>
+          </div>
+          <div class="analysis-column">
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+              <button class="btn btn-secondary" id="analyze-fallback-btn">🟠 Tavily+Groq</button>
+              <span class="status-msg" id="analysis-status-fallback" style="font-size:13px;"></span>
+            </div>
+            <div id="analysis-result-fallback" class="analysis-text">尚未產生分析。</div>
+          </div>
         </div>
-        <div class="board-title">
-          <span class="status-msg" id="analysis-status" style="font-size:14px;"></span>
-        </div>
-        <div id="analysis-result" style="white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; max-width:100%; font-size:19px; line-height:1.9; color: var(--text-main);">尚未產生分析。</div>
+        <div class="status-msg" id="arbitration-status" style="margin-top:14px; font-size:14px;"></div>
       </div>
     </div>
 
@@ -1296,36 +1330,26 @@
     const ANALYSIS_COOLDOWN_MS = 30000; // 完成後至少要等這麼久才能再按一次，避免連續呼叫 Gemini/連續 git commit
     const analysisButtonLabel = {};
 
-    // Gemini 跟備援共用同一塊顯示區，不再各自一個展開/收起面板互相打架。
-    // 兩邊的文字/狀態分別存在這個快取裡，畫面上只渲染目前選到的那個 tab。
+    // G+G（gemini）跟 T+G（fallback）現在是並排顯示的兩條獨立結果，不再是「主線/備援」
+    // 互相切換的分頁關係，兩邊各自的文字/狀態分開存、分開渲染。
     const analysisCache = {
       gemini: { text: '尚未產生分析。', status: '' },
       fallback: { text: '尚未產生分析。', status: '' },
     };
-    let activeProvider = 'gemini';
 
-    function renderActiveProvider() {
-      const entry = analysisCache[activeProvider];
-      document.getElementById('analysis-result').textContent = entry.text;
-      document.getElementById('analysis-status').textContent = entry.status;
-      document.querySelectorAll('.result-tab-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.provider === activeProvider);
-      });
+    function renderProvider(provider) {
+      const entry = analysisCache[provider];
+      document.getElementById(`analysis-result-${provider}`).textContent = entry.text;
+      document.getElementById(`analysis-status-${provider}`).textContent = entry.status;
     }
 
-    function switchToProvider(provider) {
-      activeProvider = provider;
-      renderActiveProvider();
+    function openResultPanel() {
       const panel = document.getElementById('result-panel');
       if (panel.style.display === 'none') {
         panel.style.display = 'block';
         document.getElementById('toggle-result-panel-btn').textContent = '📕 收起分析結果';
       }
     }
-
-    document.querySelectorAll('.result-tab-btn').forEach(btn => {
-      btn.addEventListener('click', () => switchToProvider(btn.dataset.provider));
-    });
 
     function startAnalysisCooldown(provider) {
       const btn = document.getElementById(`analyze-${provider}-btn`);
@@ -1349,9 +1373,9 @@
       if (btn.disabled) return;
       if (!analysisButtonLabel[provider]) analysisButtonLabel[provider] = btn.textContent;
       btn.disabled = true;
-      switchToProvider(provider); // 按了哪顆分析鈕，畫面就自動切去看那顆的結果
+      openResultPanel(); // 按了哪顆分析鈕，就把面板打開，但兩欄一起顯示、不用切換
       analysisCache[provider].status = '⏳ 分析中...(可能需要 10~30 秒)';
-      renderActiveProvider();
+      renderProvider(provider);
       try {
         const resp = await fetch(`/api/analyze/${provider}`, { method: 'POST' });
         const data = await resp.json();
@@ -1365,7 +1389,7 @@
       } catch (e) {
         analysisCache[provider].status = '❌ 無法連線本機伺服器 API（請確認是用 update.bat 開啟的網頁，不是直接雙擊 html）: ' + e.message;
       } finally {
-        if (activeProvider === provider) renderActiveProvider();
+        renderProvider(provider);
         startAnalysisCooldown(provider);
       }
     }
@@ -1379,6 +1403,27 @@
       const isHidden = panel.style.display === 'none';
       panel.style.display = isHidden ? 'block' : 'none';
       btn.textContent = isHidden ? '📕 收起分析結果' : '📖 展開分析結果';
+    });
+
+    document.getElementById('arbitration-prompt-btn').addEventListener('click', async () => {
+      const statusEl = document.getElementById('arbitration-status');
+      openResultPanel();
+      statusEl.textContent = '⏳ 整理仲裁 Prompt 中...';
+      try {
+        const resp = await fetch('/api/arbitration-prompt');
+        const data = await resp.json();
+        if (!data.ok) {
+          statusEl.textContent = '❌ ' + (data.error || '未知錯誤');
+          return;
+        }
+        await navigator.clipboard.writeText(data.text);
+        const warn = data.missing && data.missing.length
+          ? ` ｜ ⚠️ 尚缺 ${data.missing.join('、')} 的分析結果，仲裁 prompt 裡這部分會是空的，建議先跑完再仲裁`
+          : '';
+        statusEl.textContent = '✅ 已複製到剪貼簿，貼到網頁版 AI（建議 Perplexity 或 Gemini）即可' + warn;
+      } catch (e) {
+        statusEl.textContent = '❌ 無法連線本機伺服器 API 或複製到剪貼簿失敗: ' + e.message;
+      }
     });
 
     document.getElementById('shutdown-server-btn').addEventListener('click', async () => {
@@ -1400,8 +1445,8 @@
           if (data[p]) {
             analysisCache[p] = { text: data[p].text, status: '📅 上次產生: ' + data[p].generatedAt };
           }
+          renderProvider(p);
         });
-        renderActiveProvider();
       } catch (e) {}
     }
 

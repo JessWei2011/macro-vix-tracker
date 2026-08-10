@@ -317,7 +317,7 @@ def compress_to_arrow_chain(raw_text, raw_truncated=False):
 
 def call_gemini(prompt):
     if not GEMINI_API_KEY:
-        return None, "尚未設定 GEMINI_API_KEY（請在 ai_keys_local.py 填入）"
+        return None, None, "尚未設定 GEMINI_API_KEY（請在 ai_keys_local.py 填入）"
 
     # 階段一：讓模型正常查資料、正常寫分析（開 google_search，不逼格式，寫得詳細沒關係）。
     # 實測發現：格式規則和 google_search 工具一起給時，模型幾乎每次都無視格式規則，
@@ -331,20 +331,75 @@ def call_gemini(prompt):
         print(f"[gemini debug] 階段一失敗（{error}），改用 Tavily+Groq 頂上")
         raw_text, fallback_error = call_stage1_via_tavily_and_groq()
         if not raw_text:
-            return None, f"Gemini 失敗（{error}），Tavily+Groq 備援也失敗（{fallback_error}）"
+            return None, None, f"Gemini 失敗（{error}），Tavily+Groq 備援也失敗（{fallback_error}）"
         raw_truncated = False
 
-    return compress_to_arrow_chain(raw_text, raw_truncated)
+    compressed_text, error = compress_to_arrow_chain(raw_text, raw_truncated)
+    return compressed_text, raw_text, error
 
 
 def run_fallback_analysis():
-    """給「測試備援方案」按鈕用：跳過 Gemini，直接測試 Tavily+Groq 那條線，
-    好在不動用 Gemini 額度的情況下驗證備援路線本身是否正常運作。
+    """給「Tavily+Groq」按鈕用，跳過 Gemini，直接跑 Tavily 搜尋 + Groq 分析這條線。
+    現在跟 Gemini 那條線是平行的兩組獨立結果（給使用者互相比對/仲裁用），不再只是
+    「Gemini 失敗才用的備援」。
     """
     raw_text, error = call_stage1_via_tavily_and_groq()
     if not raw_text:
-        return None, error
-    return compress_to_arrow_chain(raw_text)
+        return None, None, error
+    compressed_text, error = compress_to_arrow_chain(raw_text)
+    return compressed_text, raw_text, error
+
+
+ARBITRATION_INSTRUCTION = """你是一位具備即時網路搜尋能力的總經與跨資產分析師。以下有兩組各自獨立產生、針對同一份市場數據的分析（分析組 A 與分析組 B），兩者的結論可能互相矛盾。你的任務是「仲裁」，判斷誰的論點比較站得住腳，而不是各打五十大板、各取一半。
+
+【仲裁規則 — 請務必遵守】
+1. 請優先動用你的搜尋能力，逐一查證兩組分析裡各自引用的關鍵新聞／數據事件是否真實存在、發生時間是否吻合最新一天的市場數據，而不是單純比較兩段文字何者邏輯比較通順。
+2. 如果其中一組引用了對方完全沒提到的關鍵事件（例如某項經濟數據公布、地緣政治事件），請特別查證這個事件是否真的發生、是否足以解釋走勢——這往往是判斷誰比較可信的關鍵，比純邏輯比較更重要。
+3. 針對【投資策略建議】裡的這 5 檔標的（QQQM、0050、IAU、00948B、00953B），逐一輸出：
+   - 標的代號
+   - 可信度較高的是哪一組（A／B／兩者皆可信／兩者皆不可信）
+   - 一句話原因（依查證結果，不是憑空猜測）
+   - 一句話最終推論建議（緊抱／加碼／減碼／出場其中一種；證據不足時才寫「證據不足，維持觀望」）
+4. 回答務必精簡：每檔標的只用 3-4 行說完，不要長篇大論、不要覆述兩組原文全文、不要客套話開場白或總結。
+
+請直接依序輸出這 5 檔標的的仲裁結果，用繁體中文回答。"""
+
+
+def build_arbitration_prompt():
+    """把「數據表 + G+G 與 T+G 兩條線各自的第一階段分析原文 + 仲裁指令」組成一段文字，
+    給使用者複製到網頁版 AI（建議用 Perplexity 或 Gemini 網頁版，兩者都有即時搜尋能力）
+    手動仲裁用。刻意不做成自動 API 呼叫：仲裁只偶爾需要、且網頁版通常額度比 API 免費層
+    寬鬆很多，用網頁版人工貼上完全不會多消耗任何 API 額度。
+    """
+    data = {}
+    if ANALYSIS_FILE.exists():
+        try:
+            data = json.loads(ANALYSIS_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            data = {}
+
+    gemini_raw = (data.get("gemini") or {}).get("rawText")
+    fallback_raw = (data.get("fallback") or {}).get("rawText")
+    missing = []
+    if not gemini_raw:
+        gemini_raw = "（尚無分析原文，請先按左側「Gemini+Groq」跑一次）"
+        missing.append("Gemini+Groq")
+    if not fallback_raw:
+        fallback_raw = "（尚無分析原文，請先按右側「Tavily+Groq」跑一次）"
+        missing.append("Tavily+Groq")
+
+    table = build_data_table()
+    prompt = f"""{ARBITRATION_INSTRUCTION}
+
+【原始市場數據】
+{table}
+
+【分析組 A：Gemini+Groq】
+{gemini_raw}
+
+【分析組 B：Tavily+Groq】
+{fallback_raw}"""
+    return prompt, missing
 
 
 def save_notify_config(cfg):
@@ -366,8 +421,12 @@ def save_notify_config(cfg):
     return None
 
 
-def save_analysis(provider, text):
+def save_analysis(provider, text, raw_text=None):
     """寫入分析結果並同步到 git，讓兩台電腦都看得到同一份最新結果。
+
+    除了濃縮後的 text，也把 stage1 原文（raw_text）一併存下來——這是仲裁 prompt
+    要用的素材，濃縮後的箭頭鏈格式資訊密度太高、細節被砍光了，仲裁時需要看回
+    未濃縮的完整推理過程才能查證雙方引用的事件是否屬實。
 
     做法跟 save_notify_config() 一樣：先 pull 再寫檔再 commit/push，
     先寫本機檔案，寫完才碰 git（commit -> pull --rebase -> push），這樣不管後面
@@ -386,6 +445,7 @@ def save_analysis(provider, text):
             data = {}
     data[provider] = {
         "text": text,
+        "rawText": raw_text,
         "generatedAt": datetime.now().astimezone().isoformat(timespec="seconds"),
     }
     ANALYSIS_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -415,6 +475,19 @@ class Handler(SimpleHTTPRequestHandler):
         # updates) -- never let the browser cache anything, or it'll show stale pages.
         self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
         super().end_headers()
+
+    def do_GET(self):
+        parsed = urlparse(self.path)
+        if parsed.path == "/api/arbitration-prompt":
+            prompt, missing = build_arbitration_prompt()
+            body = json.dumps({"ok": True, "text": prompt, "missing": missing}, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        super().do_GET()
 
     def do_POST(self):
         parsed = urlparse(self.path)
@@ -457,13 +530,13 @@ class Handler(SimpleHTTPRequestHandler):
         provider = parsed.path.rsplit("/", 1)[-1]
         prompt = build_prompt()
         if provider == "gemini":
-            text, error = call_gemini(prompt)
+            text, raw_text, error = call_gemini(prompt)
         elif provider == "fallback":
-            text, error = run_fallback_analysis()
+            text, raw_text, error = run_fallback_analysis()
         else:
-            text, error = None, f"未知的 provider: {provider}"
+            text, raw_text, error = None, None, f"未知的 provider: {provider}"
 
-        sync_error = save_analysis(provider, text) if text else None
+        sync_error = save_analysis(provider, text, raw_text) if text else None
 
         body = json.dumps(
             {"ok": bool(text), "text": text, "error": error, "syncError": sync_error}, ensure_ascii=False
