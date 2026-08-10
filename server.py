@@ -148,11 +148,29 @@ def call_gemini_api(system_instruction, user_text, use_search, max_tokens=1024):
     return (text or None), (None if text else "Gemini 沒有回傳文字內容"), truncated
 
 
+GROQ_RETRY_WAIT_RE = re.compile(r"try again in ([\d.]+)(ms|s)", re.IGNORECASE)
+GROQ_MAX_RETRIES = 2
+
+
+def _parse_groq_retry_wait(error_text):
+    """從 429 錯誤訊息裡的「Please try again in 405ms」抓出建議等待時間（秒）。
+    這種 TPM（每分鐘 token 數）瞬間超標多半幾百 ms 內就恢復，抓不到就給個保守預設值。
+    """
+    m = GROQ_RETRY_WAIT_RE.search(error_text)
+    if not m:
+        return 1.0
+    value = float(m.group(1))
+    return value / 1000 if m.group(2).lower() == "ms" else value
+
+
 def call_groq_api(system_instruction, user_text, max_tokens=1024):
     """階段二（純改寫壓縮，不需要搜尋）改用 Groq 跑，分攤掉 Gemini 的 google_search 額度，
     因為真正卡住免費額度的是階段一那個有開搜尋工具的呼叫，階段二只是文字重排，
     換去哪家模型都不影響品質，但可以讓 Gemini 的額度只被階段一消耗，用量直接砍半。
     Groq 的 API 是 OpenAI 相容格式（/chat/completions），不是 Gemini 那種格式。
+
+    429（TPM 瞬間超標）通常幾百毫秒內就恢復，不是真的額度用完，所以遇到 429 會照錯誤訊息
+    建議的等待時間自動重試幾次，不用使用者手動再按一次分析按鈕。
     """
     if not GROQ_API_KEY:
         return None, "尚未設定 GROQ_API_KEY（請在 ai_keys_local.py 填入）", False
@@ -168,12 +186,21 @@ def call_groq_api(system_instruction, user_text, max_tokens=1024):
         "max_tokens": max_tokens,
         "temperature": 0.3,
     }
-    resp = requests.post(
-        "https://api.groq.com/openai/v1/chat/completions",
-        headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
-        json=body,
-        timeout=60,
-    )
+
+    resp = None
+    for attempt in range(GROQ_MAX_RETRIES + 1):
+        resp = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+            json=body,
+            timeout=60,
+        )
+        if resp.status_code != 429 or attempt == GROQ_MAX_RETRIES:
+            break
+        wait = _parse_groq_retry_wait(resp.text) + 0.2  # 加一點緩衝，避免卡在邊界又撞一次
+        print(f"[groq debug] 429 TPM 超標，{wait:.2f} 秒後重試 (第 {attempt + 1}/{GROQ_MAX_RETRIES} 次)")
+        time.sleep(wait)
+
     if not resp.ok:
         return None, f"Groq API 錯誤 {resp.status_code}: {resp.text[:500]}", False
     body_json = resp.json()
