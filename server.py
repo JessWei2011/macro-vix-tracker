@@ -402,7 +402,15 @@ def build_arbitration_prompt():
     return prompt, missing
 
 
+GIT_LOCK = threading.Lock()
+
+
 def save_notify_config(cfg):
+    with GIT_LOCK:
+        return _save_notify_config_locked(cfg)
+
+
+def _save_notify_config_locked(cfg):
     result = subprocess.run(["git", "pull", "--rebase"], cwd=DIR, capture_output=True, text=True)
     if result.returncode != 0:
         return f"git pull 失敗，未儲存（請手動處理後重新整理頁面重試）: {result.stderr.strip()}"
@@ -437,6 +445,11 @@ def save_analysis(provider, text, raw_text=None):
     回傳 None 代表全部成功（本機+同步都完成）；否則回傳一則可以直接顯示給使用者看
     的錯誤說明，但無論如何本機檔案這時已經寫好了。
     """
+    with GIT_LOCK:
+        return _save_analysis_locked(provider, text, raw_text)
+
+
+def _save_analysis_locked(provider, text, raw_text):
     data = {}
     if ANALYSIS_FILE.exists():
         try:
