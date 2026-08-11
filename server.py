@@ -128,12 +128,9 @@ def build_prompt():
 {ANALYSIS_QUESTIONS_WITH_SEARCH}"""
 
 
-COMPRESS_INSTRUCTION = """你的任務是把輸入的總經分析文字，濃縮成精簡的因果箭頭鏈格式，只做濃縮改寫，禁止新增原文沒有的資訊，禁止替換或發明原文沒提到的資產代號。
-
-【格式規則，違反視為失敗】
-- 每一個論點寫成一行：事件 --> 中間結果 --> 中間結果 --> 最終結論，硬性規定至少 3 個節點（起點+至少1個中間傳導機制+結論），整行不超過 40 個字。
+COMPRESS_COMMON_RULES = """- 【傳導】每一行寫成因果箭頭鏈：事件 --> 中間結果 --> 中間結果 --> 最終結論，硬性規定至少 3 個節點（起點+至少1個中間傳導機制+結論），整行不超過 40 個字。
 - 嚴禁退化成只有 2 個節點的寫法，例如「科技股 --> 看跌」這種跳過中間推理、只剩結論的寫法一律視為失敗，必須補回原文中「為什麼」的那個中間節點（例如殖利率上升／原油上漲／通膨預期等具體傳導機制），讓讀者不用回頭看原文也知道為什麼。
-- 範例：📈 科技股（QQQM）: 原油上漲 --> 增加企業運營成本 --> 高通膨高利率 --> 不利科技股 --> QQQM看跌 📉
+- 【傳導】範例：📈 科技股（QQQM）: 原油上漲 --> 增加企業運營成本 --> 高通膨高利率 --> 不利科技股 --> QQQM看跌 📉
 - 節點只能是名詞或極短詞組，不准有「可能」「因此」「顯示」等連接詞或完整句子，不准在箭頭鏈後面加冒號解釋。
 - 同一個資產／指數如果在不同行出現方向不同的結論（例如科技股一行看跌、另一行又看漲），兩行的中間節點必須分別點出各自不同的驅動因子，讓讀者看得出兩行在講不同的傳導路徑、不是互相矛盾；不能兩行都只寫「資產 --> 方向」導致看起來像是同一件事却給出相反答案。
 - 保留原文的三個段落標題，並在標題前加對應 emoji：🔍【原因】、🔗【傳導】、💰【投資策略建議】。
@@ -149,6 +146,25 @@ COMPRESS_INSTRUCTION = """你的任務是把輸入的總經分析文字，濃縮
 - 整份輸出字數上限 450 字（不含 emoji）——比原本上限多留一點空間，因為保留中間推理節點跟投資建議的關鍵理由會比之前的極簡版本多佔一些字數，不要為了硬壓字數又把節點砍回 2 個或把理由拿掉。
 
 用繁體中文輸出。"""
+
+
+# 給 Groq 純數據路線用：原文本來就沒有真的新聞，【原因】維持跟【傳導】一樣的因果箭頭鏈格式。
+COMPRESS_INSTRUCTION_DATA_ONLY = f"""你的任務是把輸入的總經分析文字，濃縮成精簡的因果箭頭鏈格式，只做濃縮改寫，禁止新增原文沒有的資訊，禁止替換或發明原文沒提到的資產代號。
+
+【格式規則，違反視為失敗】
+- 【原因】跟【傳導】一樣寫成因果箭頭鏈：事件 --> 中間結果 --> 中間結果 --> 最終結論，至少 3 個節點，整行不超過 40 個字。
+{COMPRESS_COMMON_RULES}"""
+
+
+# 給 Gemini（有開 google_search）路線用：原文真的查了新聞，【原因】不要因果箭頭鏈，
+# 直接濃縮成「新聞超濃縮重點」——使用者要的是查到的新聞事實本身，不是模型自己腦補的因果推理。
+COMPRESS_INSTRUCTION_NEWS = f"""你的任務是把輸入的總經分析文字，濃縮成精簡格式，只做濃縮改寫，禁止新增原文沒有的資訊，禁止替換或發明原文沒提到的資產代號。
+
+【格式規則，違反視為失敗】
+- 【原因】改成「新聞超濃縮重點」，不是因果箭頭鏈：把原文查到的新聞事件，每條寫成一行純粹的事實摘要（誰/發生什麼/數字），不超過 25 個字，禁止用「-->」箭頭、禁止寫「導致」「因此」「代表」等因果解讀詞，就是壓縮過的新聞標題，讓人一眼掃過去就知道今天發生了什麼事，不是在講為什麼。每條前面加一個情境 emoji（地緣政治🌍、Fed/利率🏦、油價🛢️、恐慌情緒😨、黃金🥇、科技股💻，自行判斷）。
+  範例：🌍 伊朗擬立法禁美以船隻通過荷莫茲海峽
+  範例：🏦 Fed官員談話偏鴿，降息預期升溫
+{COMPRESS_COMMON_RULES}"""
 
 
 def call_gemini_api(system_instruction, user_text, use_search, max_tokens=1024):
@@ -293,7 +309,7 @@ STANCE_LINE_RE = re.compile(r"^[🟢🟡🔴⚫]\s*\S+\s+(緊抱|加碼|減碼|�
 
 
 def flag_ungrounded_investment_lines(text):
-    """COMPRESS_INSTRUCTION 已經要求【投資策略建議】每一行都要附括號理由，
+    """COMPRESS_INSTRUCTION_* 已經要求【投資策略建議】每一行都要附括號理由，
     但實測發現 Groq/Gemini 都不是每次乖乖照做——尤其原文本身就沒給某檔標的
     理由時，模型常常直接照抄成一行光禿禿的立場（例如「🟢 IAU 加碼」），
     看起來像是有憑有據，其實原文根本沒討論過。與其靠 prompt 硬凹到 100%
@@ -307,21 +323,24 @@ def flag_ungrounded_investment_lines(text):
     return "\n".join(lines)
 
 
-def compress_to_arrow_chain(raw_text, raw_truncated=False):
-    """階段二：把階段一寫好的長文壓縮成因果箭頭鏈格式，Gemini/純數據 Groq 兩條路線
-    到這裡都共用同一段邏輯。優先用 Groq（免搜尋、免占用 Gemini 額度），失敗才退回 Gemini。
+def compress_to_arrow_chain(raw_text, raw_truncated=False, news_style=False):
+    """階段二：把階段一寫好的長文壓縮成精簡格式，Gemini/純數據 Groq 兩條路線
+    到這裡都共用同一段邏輯，差別只在 news_style：Gemini 那條線真的查了新聞，
+    【原因】段落改用「新聞超濃縮重點」而不是因果箭頭鏈。優先用 Groq（免搜尋、
+    免占用 Gemini 額度），失敗才退回 Gemini。
     """
+    instruction = COMPRESS_INSTRUCTION_NEWS if news_style else COMPRESS_INSTRUCTION_DATA_ONLY
     compress_input = (
         f"{raw_text}\n\n---\n"
         "提醒：【投資策略建議】只能是這 5 檔，不可替換成其他代號：QQQM、0050、IAU、00948B、00953B。"
     )
     compressed_text, error, compress_truncated = call_groq_api(
-        COMPRESS_INSTRUCTION, compress_input, max_tokens=1536
+        instruction, compress_input, max_tokens=1536
     )
     if not compressed_text:
         print(f"[groq debug] 階段二改用 Groq 失敗（{error}），退回用 Gemini 跑這段")
         compressed_text, error, compress_truncated = call_gemini_api(
-            COMPRESS_INSTRUCTION, compress_input, use_search=False, max_tokens=1536
+            instruction, compress_input, use_search=False, max_tokens=1536
         )
     if not compressed_text:
         # 濃縮失敗就退回原始版本，總比沒有分析好；但如果原始版本本身也被截斷過，
@@ -345,6 +364,7 @@ def call_gemini(prompt):
     # max_tokens 給大一點空間 (4096)：這階段是詳細中文長文 + google_search 的 grounding
     # 內容都算在輸出裡，1024 太容易被硬切斷（曾發生截到一半、句子沒寫完就沒了）。
     raw_text, error, raw_truncated = call_gemini_api(None, prompt, use_search=True, max_tokens=4096)
+    used_search = True
     if not raw_text:
         # Gemini 的 google_search 額度通常比模型本身的請求額度小很多，最容易先在
         # 這裡被打回票。整條線改用純數據 Groq 頂上，避免直接失敗。
@@ -353,8 +373,9 @@ def call_gemini(prompt):
         if not raw_text:
             return None, None, f"Gemini 失敗（{error}），Groq 備援也失敗（{fallback_error}）"
         raw_truncated = False
+        used_search = False  # 退回純數據路線，沒有真的查新聞，【原因】不能用新聞摘要格式
 
-    compressed_text, error = compress_to_arrow_chain(raw_text, raw_truncated)
+    compressed_text, error = compress_to_arrow_chain(raw_text, raw_truncated, news_style=used_search)
     return compressed_text, raw_text, error
 
 
