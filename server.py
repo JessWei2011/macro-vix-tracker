@@ -136,11 +136,17 @@ COMPRESS_COMMON_RULES = """- 【傳導】每一行寫成因果箭頭鏈：事件
 - 嚴禁退化成只有 2 個節點的寫法，例如「科技股 --> 看跌」這種跳過中間推理、只剩結論的寫法一律視為失敗，必須補回原文中「為什麼」的那個中間節點（例如殖利率上升／原油上漲／通膨預期等具體傳導機制），讓讀者不用回頭看原文也知道為什麼。
 - 【傳導】範例：📈 科技股（QQQM）: 原油上漲 --> 增加企業運營成本 --> 高通膨高利率 --> 不利科技股 --> QQQM看跌 📉
 - 節點只能是名詞或極短詞組，不准有「可能」「因此」「顯示」等連接詞或完整句子，不准在箭頭鏈後面加冒號解釋。
-- 同一個資產／指數如果在不同行出現方向不同的結論（例如科技股一行看跌、另一行又看漲），兩行的中間節點必須分別點出各自不同的驅動因子，讓讀者看得出兩行在講不同的傳導路徑、不是互相矛盾；不能兩行都只寫「資產 --> 方向」導致看起來像是同一件事却給出相反答案。
+- 【傳導】裡同一個資產／指數只能出現「一次」最終結論，絕對禁止同一個資產同時出現看漲又看跌兩條互相矛盾的行——這是最容易被扣分的錯誤，務必檢查。
+  如果原文提到這個資產同時有多股力量互相拉扯（例如避險需求推升 vs 美元走強壓抑），你必須自己權衡兩股力量的強弱，合併成「一條」淨結論的箭頭鏈，節點裡帶到互相拉扯的關鍵因子，例如：
+  🌍 中東緊張 --> 避險需求增 --> 美元走強部分抵銷 --> IAU淨看漲 📈
+  絕對不准像這樣把兩股力量拆成兩條方向互斥的獨立行丟給讀者：
+  🌍 中東緊張 --> 避險需求增 --> IAU看漲 📈
+  🛢️ 油價上漲 --> 美元走強 --> IAU看跌 📉  ←（錯誤示範，同一資產不准出現兩個相反結論）
 - 保留原文的三個段落標題，並在標題前加對應 emoji：🔍【原因】、🔗【傳導】、💰【投資策略建議】。
 - 【傳導】每一行結尾是看漲就加 📈，看跌就加 📉。
 - 每一行開頭依內容性質加一個情境 emoji（自行判斷語意選用，例如地緣政治用 🌍、Fed/利率用 🏦、油價用 🛢️、恐慌情緒用 😨、黃金用 🥇、科技股用 💻，不要每行都用同一個）。
 - 第三段【投資策略建議】只能包含這 5 檔，逐一列出、順序不變、代號不可更改替換：QQQM、0050、IAU、00948B、00953B。每檔一行，格式是「emoji 代號 立場（3~8字關鍵理由）」，立場只能是「緊抱／加碼／減碼／出場」其中一種，並依立場在最前面加 emoji：🟢加碼、🟡緊抱、🔴減碼、⚫出場。
+- 【投資策略建議】的立場方向必須跟【傳導】裡對應資產的淨結論一致，不准【傳導】寫看跌、【投資策略建議】卻寫加碼這種頭尾矛盾，這條規則沒有例外。
 - 【投資策略建議】嚴禁幻覺：括號裡的關鍵理由必須是前面【原因】【傳導】兩段實際出現過的因果節點，不准為了湊格式編造原文沒提過的理由。這條規則沒有例外，括號絕對不能省略。
 - 如果原文對某檔標的完全沒有給出具體驅動因子，就照實寫「🟡 IAU 緊抱（原文未討論，僅供參考）」這種格式老實承認沒依據，不准硬掰一個看起來煞有其事、但其實原文完全沒出現過的立場或理由，也不准直接省略括號蒙混過去。
 - 正確範例：🟢 0050 加碼（風險偏好回升）／🔴 IAU 減碼（美元走強承壓）／🟡 IAU 緊抱（原文未討論，僅供參考）
@@ -419,6 +425,78 @@ def flag_ungrounded_investment_lines(text):
     return "\n".join(lines)
 
 
+TICKERS = ["QQQM", "0050", "IAU", "00948B", "00953B"]
+
+
+STRATEGY_LINE_RE = re.compile(r"[🟢🟡🔴⚫]\s*(\S+)\s+(緊抱|加碼|減碼|出場)")
+BULLISH_STANCE = {"加碼"}
+BEARISH_STANCE = {"減碼", "出場"}
+
+
+def _split_sections(text):
+    lines = text.split("\n")
+    try:
+        t_start = next(i for i, l in enumerate(lines) if "傳導" in l)
+    except StopIteration:
+        return [], []
+    try:
+        s_start = next(i for i in range(t_start + 1, len(lines)) if "投資策略建議" in lines[i])
+    except StopIteration:
+        s_start = len(lines)
+    return lines[t_start:s_start], lines[s_start:]
+
+
+def flag_contradictory_transmission_lines(text):
+    """COMPRESS_COMMON_RULES 已經要求【傳導】裡同一檔標的只能有一個淨結論、且【投資策略建議】
+    的立場要跟【傳導】一致，但實測發現模型不是每次都乖乖遵守——常見失敗模式有兩種：
+    ① 同一檔標的在【傳導】不同行分別被推導出看漲跟看跌，互相矛盾；
+    ② 【傳導】寫看跌，【投資策略建議】卻寫加碼（或反過來），頭尾矛盾。
+    跟 flag_ungrounded_investment_lines() 一樣，不完全靠 prompt 硬凹，直接用程式碼掃過一遍，
+    偵測到就在文字最前面加一段明顯的警告，讓使用者知道這份分析內部不一致、需要自己判斷，
+    而不是誤以為這是已經算好、可以直接採信的最終結論。
+    """
+    transmission_lines, strategy_lines = _split_sections(text)
+    if not transmission_lines:
+        return text
+
+    ticker_directions = {}
+    for ticker in TICKERS:
+        directions = {
+            line_text[-1]
+            for line_text in transmission_lines
+            if ticker in line_text and line_text and line_text[-1] in ("📈", "📉")
+        }
+        if directions:
+            ticker_directions[ticker] = directions
+
+    internal_contradictions = [t for t, dirs in ticker_directions.items() if len(dirs) > 1]
+
+    cross_contradictions = []
+    for line_text in strategy_lines:
+        m = STRATEGY_LINE_RE.search(line_text)
+        if not m:
+            continue
+        ticker, stance = m.group(1), m.group(2)
+        if ticker not in ticker_directions or len(ticker_directions[ticker]) != 1:
+            continue  # 淨方向本身就矛盾/沒提到，已經在上面那條規則處理過，這裡不重複報
+        net_direction = next(iter(ticker_directions[ticker]))
+        if net_direction == "📈" and stance in BEARISH_STANCE:
+            cross_contradictions.append(f"{ticker}（傳導看漲但建議{stance}）")
+        elif net_direction == "📉" and stance in BULLISH_STANCE:
+            cross_contradictions.append(f"{ticker}（傳導看跌但建議{stance}）")
+
+    if not internal_contradictions and not cross_contradictions:
+        return text
+
+    parts = []
+    if internal_contradictions:
+        parts.append(f"【傳導】裡 {'、'.join(internal_contradictions)} 同時出現看漲又看跌的矛盾行")
+    if cross_contradictions:
+        parts.append(f"【傳導】跟【投資策略建議】方向兜不起來：{'、'.join(cross_contradictions)}")
+    warning = f"⚠️（自動檢測到分析內部不一致 — {'；'.join(parts)}。AI 沒有確實合併成單一淨結論，投資策略建議可能只是隨機挑了一邊，請自行判斷或重新分析）\n\n"
+    return warning + text
+
+
 def compress_to_arrow_chain(raw_text, raw_truncated=False, news_style=False):
     """階段二：把階段一寫好的長文壓縮成精簡格式，Gemini/純數據 Groq 兩條路線
     到這裡都共用同一段邏輯，差別只在 news_style：Gemini 那條線真的查了新聞，
@@ -447,6 +525,7 @@ def compress_to_arrow_chain(raw_text, raw_truncated=False, news_style=False):
     if compress_truncated:
         compressed_text += "\n\n⚠️（內容可能因長度限制被截斷）"
     compressed_text = flag_ungrounded_investment_lines(compressed_text)
+    compressed_text = flag_contradictory_transmission_lines(compressed_text)
     return compressed_text, None
 
 
