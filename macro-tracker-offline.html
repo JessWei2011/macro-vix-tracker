@@ -786,10 +786,12 @@
 
     <!-- 【區塊 2.5】：AI 總經分析（G+G 與 T+G 兩條線並排比對，用仲裁 Prompt 送去網頁版 AI 裁決） -->
     <div class="entry-card">
-      <div class="card-title">🤖 AI 總經分析（因果解讀，不是數字整理）</div>
-      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
-        <button class="btn btn-secondary" id="toggle-result-panel-btn">📖 展開分析結果</button>
-        <button class="btn btn-secondary" id="arbitration-prompt-btn" title="把兩條線的分析原文與數據整理成仲裁用 prompt，自動複製到剪貼簿；貼到網頁版 AI（建議 Perplexity 或 Gemini，兩者都有即時搜尋能力）幫你仲裁誰比較可信">⚖️ 仲裁 Prompt</button>
+      <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:16px;">
+        <div class="card-title" style="margin-bottom:0;">🤖 AI 總經分析</div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="btn btn-secondary" id="toggle-result-panel-btn">📖 展開分析結果</button>
+          <button class="btn btn-secondary" id="arbitration-prompt-btn" title="把兩條線的分析原文與數據整理成仲裁用 prompt，自動複製到剪貼簿；貼到網頁版 AI（建議 Perplexity 或 Gemini，兩者都有即時搜尋能力）幫你仲裁誰比較可信">⚖️ 仲裁 Prompt</button>
+        </div>
       </div>
       <div class="board-card" id="result-panel" style="display:none;">
         <div class="analysis-columns">
@@ -814,11 +816,9 @@
 
     <!-- 【區塊 3】：數值區 / 表格顯示區 -->
     <div class="status-msg" id="cell-edit-status" style="margin-bottom:4px;"></div>
-    <div style="margin-bottom:10px;">
-      <button class="btn btn-secondary" id="toggle-history-btn">📖 展開歷史數據</button>
-    </div>
 
     <div class="table-container">
+      <button class="btn btn-secondary" id="toggle-history-btn" style="font-size:13px; padding:6px 12px; margin:10px 0 8px 10px;">📖 展開歷史數據</button>
       <table>
         <thead>
           <tr>
