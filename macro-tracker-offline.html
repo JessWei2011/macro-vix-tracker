@@ -232,20 +232,25 @@
     .analysis-columns {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 20px;
+      column-gap: 20px;
+      row-gap: 10px;
     }
     @media (max-width: 850px) {
       .analysis-columns {
         grid-template-columns: 1fr;
       }
     }
-    .analysis-column {
+    .analysis-header-cell {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .analysis-text {
       background-color: #1c1f2a;
       border: 1px solid var(--card-border);
       border-radius: 12px;
       padding: 16px;
-    }
-    .analysis-text {
       white-space: pre-wrap;
       overflow-wrap: anywhere;
       word-break: break-word;
@@ -788,20 +793,20 @@
       </div>
       <div class="board-card" id="result-panel" style="display:none;">
         <div class="analysis-columns">
-          <div class="analysis-column">
-            <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
-              <button class="btn btn-secondary" id="analyze-gemini-btn">🔵 Gemini+Groq</button>
-              <span class="status-msg" id="analysis-status-gemini" style="font-size:13px;"></span>
-            </div>
-            <div id="analysis-result-gemini" class="analysis-text">尚未產生分析。</div>
+          <div class="analysis-header-cell">
+            <button class="btn btn-secondary" id="analyze-gemini-btn">🔵 Gemini+Groq</button>
+            <span class="status-msg" id="analysis-status-gemini" style="font-size:13px;"></span>
           </div>
-          <div class="analysis-column">
-            <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
-              <button class="btn btn-secondary" id="analyze-fallback-btn">🟠 Tavily+Groq</button>
-              <span class="status-msg" id="analysis-status-fallback" style="font-size:13px;"></span>
-            </div>
-            <div id="analysis-result-fallback" class="analysis-text">尚未產生分析。</div>
+          <div class="analysis-header-cell">
+            <button class="btn btn-secondary" id="analyze-fallback-btn">🟠 Tavily+Groq</button>
+            <span class="status-msg" id="analysis-status-fallback" style="font-size:13px;"></span>
           </div>
+          <!-- 原因+傳導放同一個 grid row，兩欄高度會自動對齊到較高的那欄，
+               這樣下面的投資策略建議 row 就會從同一個高度開始，方便左右對照。 -->
+          <div id="analysis-body-gemini" class="analysis-text">尚未產生分析。</div>
+          <div id="analysis-body-fallback" class="analysis-text">尚未產生分析。</div>
+          <div id="analysis-strategy-gemini" class="analysis-text"></div>
+          <div id="analysis-strategy-fallback" class="analysis-text"></div>
         </div>
         <div class="status-msg" id="arbitration-status" style="margin-top:14px; font-size:14px;"></div>
       </div>
@@ -1442,9 +1447,22 @@
       fallback: { text: '尚未產生分析。', status: '' },
     };
 
+    // 把「投資策略建議」段落切出來單獨放進 grid 的第三個 row，讓兩欄的這個段落
+    // 自動對齊到同一個高度（CSS Grid 同一 row 的兩個 cell 會共用最高者的高度）。
+    // 用標題文字「投資策略建議」定位，不要用 💰 emoji ——【傳導】裡某一行偶爾也會
+    // 湊巧選到 💰 當情境 emoji，用 emoji 找會切錯位置。
+    function splitAnalysisText(text) {
+      const idx = text.indexOf('投資策略建議');
+      if (idx === -1) return { body: text, strategy: '' };
+      const lineStart = text.lastIndexOf('\n', idx) + 1;
+      return { body: text.slice(0, lineStart).trimEnd(), strategy: text.slice(lineStart) };
+    }
+
     function renderProvider(provider) {
       const entry = analysisCache[provider];
-      document.getElementById(`analysis-result-${provider}`).textContent = entry.text;
+      const { body, strategy } = splitAnalysisText(entry.text);
+      document.getElementById(`analysis-body-${provider}`).textContent = body;
+      document.getElementById(`analysis-strategy-${provider}`).textContent = strategy;
       document.getElementById(`analysis-status-${provider}`).textContent = entry.status;
     }
 
