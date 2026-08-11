@@ -816,6 +816,7 @@
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
           <button class="btn btn-secondary" id="download-file-btn">💾 手動下載 macro_data.json</button>
           <button class="btn btn-secondary" id="copy-json-btn">📋 複製 JSON</button>
+          <button class="btn btn-secondary" id="json-prompt-btn" title="把完整歷史 JSON 數據整理成分析用 prompt，自動複製到剪貼簿；貼到網頁版 AI（建議 Perplexity 或 Gemini，兩者都有即時搜尋能力）試試看比 API 版準確度高不高">📝 JSON Prompt</button>
         </div>
       </div>
       <div class="status-msg" id="copy-json-status" style="margin-top: 10px; min-height: 22px;"></div>
@@ -1351,6 +1352,46 @@
         statusEl.style.color = '#00e676';
         statusEl.textContent = '✅ 已複製到剪貼簿！';
         setTimeout(() => { statusEl.textContent = ''; }, 2500);
+      }).catch(() => {
+        statusEl.style.color = '#ff4d4d';
+        statusEl.textContent = '❌ 複製失敗，請手動選取複製。';
+        setTimeout(() => { statusEl.textContent = ''; }, 3000);
+      });
+    });
+
+    // 把完整歷史 JSON + 分析指令組成一段 prompt，讓使用者貼到網頁版 AI（Perplexity / Gemini 等
+    // 有即時搜尋能力的版本）手動測試，跟 server.py 的 API 路線互相比較準確度。
+    // 問題文字刻意跟 server.py 的 ANALYSIS_QUESTIONS_WITH_SEARCH 保持完全一致的措辭，
+    // 這樣兩條路線比較的才是「同一個問題」而不是「兩個不同的分析任務」。
+    const JSON_PROMPT_QUESTIONS = `請針對最新一天相對前一天的變化，依序回答：
+1.【原因】今天變動最明顯的 1-2 項指標，用你查到的最新新聞/事件解釋「為什麼」會這樣變動（例如 OPEC+ 決策、地緣政治、Fed 談話、經濟數據公布等具體原因，不要只是複述數字）。
+2.【傳導】這個變動可能如何牽動其他資產／指數（例如黃金、美元指數、科技股、公債），方向是看漲還是看跌，並說明傳導邏輯。
+3.【投資策略建議】依據這幾項數據的走勢，針對以下 5 檔標的分別給出具體策略建議：QQQM、0050（台股大盤ETF）、IAU（黃金）、00948B、00953B。
+   每一檔請明確給出「緊抱／加碼／減碼／出場」其中一種立場，並說明為什麼（要連回前面①②的因果邏輯）。
+
+請用繁體中文回答，段落分明。`;
+
+    function buildJsonPrompt() {
+      const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date));
+      const fieldNote = FRESHNESS_FIELDS.map(f => `${f.key} = ${f.label}`).join('\n');
+      return `你是一位總經與跨資產分析師。請先利用你的網路搜尋能力，查詢下面這幾項市場指標近期相關的最新新聞與事件（例如 OPEC+ 決策、地緣政治、Fed 談話、經濟數據公布等），再結合下方完整的歷史 JSON 數據一起分析，不要只憑數據本身腦補。
+
+【欄位說明】
+${fieldNote}
+（每筆資料的 _meta 只是抓取時間戳記，分析時忽略即可）
+
+【完整歷史數據 JSON】
+${JSON.stringify(sorted, null, 2)}
+
+${JSON_PROMPT_QUESTIONS}`;
+    }
+
+    document.getElementById('json-prompt-btn').addEventListener('click', () => {
+      const statusEl = document.getElementById('copy-json-status');
+      navigator.clipboard.writeText(buildJsonPrompt()).then(() => {
+        statusEl.style.color = '#00e676';
+        statusEl.textContent = '✅ 已複製到剪貼簿，貼到網頁版 AI（建議 Perplexity 或 Gemini）即可！';
+        setTimeout(() => { statusEl.textContent = ''; }, 3500);
       }).catch(() => {
         statusEl.style.color = '#ff4d4d';
         statusEl.textContent = '❌ 複製失敗，請手動選取複製。';
