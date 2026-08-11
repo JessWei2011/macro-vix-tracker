@@ -466,6 +466,46 @@
       margin-bottom: 14px;
     }
 
+    /* 三大法人明細小表：獨立一套樣式，跟主表格區隔開，強調「合計」列、買賣超正負用色 */
+    .inst-table-wrap {
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .inst-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      min-width: 520px;
+    }
+    .inst-table th {
+      background-color: #20222c;
+      color: var(--text-sub);
+      font-size: 14px;
+      font-weight: 700;
+      padding: 10px 14px;
+      border-bottom: 2px solid var(--card-border);
+    }
+    .inst-table th:not(:first-child), .inst-table td:not(:first-child) {
+      text-align: right;
+      font-family: "Courier New", Courier, monospace;
+    }
+    .inst-table td {
+      padding: 10px 14px;
+      font-size: 16px;
+      font-weight: 600;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .inst-table tbody tr:nth-child(odd):not(.inst-total-row) { background-color: #17181f; }
+    .inst-table tbody tr:hover { background-color: #21232e; }
+    .inst-table tbody tr.inst-total-row {
+      background-color: #23261a;
+      font-weight: 800;
+    }
+    .inst-table tbody tr.inst-total-row td { border-bottom: none; border-top: 2px solid var(--accent); }
+    .inst-net-up { color: var(--up-red); }
+    .inst-net-down { color: var(--down-green); }
+
     table {
       width: 100%;
       border-collapse: collapse;
@@ -1634,18 +1674,22 @@ ${JSON_PROMPT_QUESTIONS}`;
     }
 
     function renderInstBreakdownTable(data) {
-      const rows = data.rows.map(r => `
-        <tr>
+      const rows = data.rows.map(r => {
+        const isTotal = r.label === '合計';
+        const netCls = r.net >= 0 ? 'inst-net-up' : 'inst-net-down';
+        const netIcon = r.net >= 0 ? '🔴' : '🟢'; // 台股慣例：紅=買超(漲)、綠=賣超(跌)
+        return `
+        <tr${isTotal ? ' class="inst-total-row"' : ''}>
           <td>${r.label}</td>
-          <td class="num-cell" style="cursor:default;">${formatYi(r.buy, false)}</td>
-          <td class="num-cell" style="cursor:default;">${formatYi(r.sell, false)}</td>
-          <td class="num-cell" style="cursor:default; font-weight:800; color:${r.net >= 0 ? 'var(--up-red)' : 'var(--down-green)'};">${formatYi(r.net, true)}</td>
-        </tr>
-      `).join('');
-      return `<table style="min-width:0;">
+          <td>${formatYi(r.buy, false)}</td>
+          <td>${formatYi(r.sell, false)}</td>
+          <td class="${netCls}">${netIcon} ${formatYi(r.net, true)}</td>
+        </tr>`;
+      }).join('');
+      return `<div class="inst-table-wrap"><table class="inst-table">
         <thead><tr><th>單位</th><th>買進金額</th><th>賣出金額</th><th>買賣差額</th></tr></thead>
         <tbody>${rows}</tbody>
-      </table>`;
+      </table></div>`;
     }
 
     async function loadInstBreakdown() {
@@ -1660,7 +1704,8 @@ ${JSON_PROMPT_QUESTIONS}`;
           statusEl.textContent = '❌ ' + (data.error || '查詢失敗');
           return;
         }
-        statusEl.textContent = `資料日期 ${data.data.date}`;
+        const fetchedAt = new Date().toLocaleTimeString('zh-TW', { hour12: false });
+        statusEl.textContent = `資料日期 ${data.data.date} ｜ 查詢時間 ${fetchedAt}`;
         bodyEl.innerHTML = renderInstBreakdownTable(data.data);
       } catch (e) {
         statusEl.textContent = '❌ 無法連線本機伺服器 API: ' + e.message;
