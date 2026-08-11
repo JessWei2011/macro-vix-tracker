@@ -278,39 +278,40 @@
       background-color: var(--card-bg);
       border: 2px solid var(--card-border);
       border-radius: 14px;
-      padding: 20px;
+      padding: 14px 16px;
     }
 
     .board-title {
-      font-size: 21px;
+      font-size: 18px;
       font-weight: 800;
-      margin-bottom: 16px;
+      margin-bottom: 10px;
       display: flex;
       justify-content: space-between;
       align-items: center;
       border-bottom: 1px solid var(--card-border);
-      padding-bottom: 10px;
+      padding-bottom: 8px;
     }
 
     .board-title span.val-highlight {
       font-family: "Courier New", Courier, monospace;
-      font-size: 24px;
+      font-size: 22px;
       color: var(--accent);
     }
 
     .lights-list {
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 4px;
     }
 
+    /* 每個燈號濃縮成一排：範圍標題 + 極短描述 + 當前徽章，不再分兩行。 */
     .light-stage {
-      border-radius: 10px;
-      padding: 12px 14px;
+      border-radius: 8px;
+      padding: 6px 10px;
       transition: all 0.3s ease;
       display: flex;
-      flex-direction: column;
-      gap: 4px;
+      align-items: center;
+      gap: 8px;
       position: relative;
     }
 
@@ -326,32 +327,24 @@
       background-color: #1c1d28;
       border: 2px solid var(--light-color, var(--accent));
       box-shadow: 0 0 16px var(--light-color-glow, rgba(0,229,255,0.4));
-      transform: scale(1.02);
-    }
-
-    .light-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
     }
 
     .light-range-title {
-      font-size: 18px;
+      font-size: 15px;
       font-weight: 800;
       color: #ffffff;
-      display: flex;
-      align-items: center;
-      gap: 8px;
+      white-space: nowrap;
     }
 
     .active-badge {
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 800;
-      padding: 2px 8px;
+      padding: 1px 6px;
       border-radius: 4px;
       background-color: var(--light-color, var(--accent));
       color: #000000;
       display: none;
+      margin-left: auto;
     }
 
     .light-stage.active .active-badge {
@@ -359,9 +352,11 @@
     }
 
     .light-desc {
-      font-size: 15px;
+      font-size: 13px;
       color: var(--text-sub);
-      line-height: 1.4;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .light-stage.active .light-desc {
@@ -688,49 +683,6 @@
     <!-- 【區塊 2】：燈號區 (雙市場恐慌燈號戰情室) -->
     <div class="indicator-boards-grid">
       
-      <!-- 🇺🇸 美股 VIX 燈號 -->
-      <div class="board-card">
-        <div class="board-title">
-          <span>🇺🇸 美股 S&P500：VIX 恐慌燈號</span>
-          <span class="val-highlight" id="lbl-cur-vix">--</span>
-        </div>
-        <div class="lights-list" id="vix-lights-container">
-          
-          <div class="light-stage dim" id="vix-stage-1" style="--light-color: var(--c-green); --light-color-glow: rgba(0,230,118,0.5);">
-            <div class="light-head">
-              <div class="light-range-title">🟢 &lt; 16 溫水煮青蛙區</div>
-              <div class="active-badge">當前區間 🔥</div>
-            </div>
-            <div class="light-desc">超舒適，多頭緩漲，法人慢慢拉，你空手會很焦慮。</div>
-          </div>
-
-          <div class="light-stage dim" id="vix-stage-2" style="--light-color: var(--c-yellow); --light-color-glow: rgba(255,234,0,0.5);">
-            <div class="light-head">
-              <div class="light-range-title">🟡 16 ~ 18 緩漲區</div>
-              <div class="active-badge">當前區間 🔥</div>
-            </div>
-            <div class="light-desc">正常回檔，漲多休息。QQQM跌1-2%很正常，這是高勝率加碼區，不是逃命區。</div>
-          </div>
-
-          <div class="light-stage dim" id="vix-stage-3" style="--light-color: var(--c-orange); --light-color-glow: rgba(255,145,0,0.5);">
-            <div class="light-head">
-              <div class="light-range-title">🟠 18 ~ 22 驚嚇區</div>
-              <div class="active-badge">當前區間 🔥</div>
-            </div>
-            <div class="light-desc">市場開始怕了，新聞會寫「美股重挫」。S&P500大概跌3-5%，這是錯殺加碼起點，就是你要的發酵空間。</div>
-          </div>
-
-          <div class="light-stage dim" id="vix-stage-4" style="--light-color: var(--c-red); --light-color-glow: rgba(255,61,0,0.6);">
-            <div class="light-head">
-              <div class="light-range-title">🔴 &gt; 22 逃命區</div>
-              <div class="active-badge">當前區間 🔥</div>
-            </div>
-            <div class="light-desc">真的出事了，流動性恐慌，QQQM可以閉眼加。</div>
-          </div>
-
-        </div>
-      </div>
-
       <!-- 🇹🇼 台股 VIXTWN 燈號 -->
       <div class="board-card">
         <div class="board-title">
@@ -738,47 +690,61 @@
           <span class="val-highlight" id="lbl-cur-vixtwn">--</span>
         </div>
         <div class="lights-list" id="vixtwn-lights-container">
-          
           <div class="light-stage dim" id="vixtwn-stage-1" style="--light-color: var(--c-green); --light-color-glow: rgba(0,230,118,0.5);">
-            <div class="light-head">
-              <div class="light-range-title">🟢 &lt; 28 牛市無聊區</div>
-              <div class="active-badge">當前區間 🔥</div>
-            </div>
-            <div class="light-desc">大家都不怕，台股噴。</div>
+            <div class="light-range-title">🟢 &lt;28 牛市無聊區</div>
+            <div class="light-desc">台股噴</div>
+            <div class="active-badge">🔥</div>
           </div>
-
           <div class="light-stage dim" id="vixtwn-stage-2" style="--light-color: var(--c-yellow); --light-color-glow: rgba(255,234,0,0.5);">
-            <div class="light-head">
-              <div class="light-range-title">🟡 28 ~ 35 正常緊張區</div>
-              <div class="active-badge">當前區間 🔥</div>
-            </div>
-            <div class="light-desc">小回檔，外資小賣。</div>
+            <div class="light-range-title">🟡 28~35 正常緊張區</div>
+            <div class="light-desc">外資小賣</div>
+            <div class="active-badge">🔥</div>
           </div>
-
           <div class="light-stage dim" id="vixtwn-stage-3" style="--light-color: var(--c-orange); --light-color-glow: rgba(255,145,0,0.5);">
-            <div class="light-head">
-              <div class="light-range-title">🟠 35 ~ 40 恐慌區</div>
-              <div class="active-badge">當前區間 🔥</div>
-            </div>
-            <div class="light-desc">自營商開始砍倉，融資斷頭。0050的高勝率加碼區，別人恐懼你加碼。</div>
+            <div class="light-range-title">🟠 35~40 恐慌區</div>
+            <div class="light-desc">高勝率加碼區</div>
+            <div class="active-badge">🔥</div>
           </div>
-
           <div class="light-stage dim" id="vixtwn-stage-4" style="--light-color: var(--c-red); --light-color-glow: rgba(255,61,0,0.6);">
-            <div class="light-head">
-              <div class="light-range-title">🔴 40 ~ 45 多殺多區</div>
-              <div class="active-badge">當前區間 🔥</div>
-            </div>
-            <div class="light-desc">投信+自營商+融資三殺，地板很血腥，但通常3天內就反彈。</div>
+            <div class="light-range-title">🔴 40~45 多殺多區</div>
+            <div class="light-desc">血腥但常反彈</div>
+            <div class="active-badge">🔥</div>
           </div>
-
           <div class="light-stage dim" id="vixtwn-stage-5" style="--light-color: var(--c-dark-bomb); --light-color-glow: rgba(160,160,176,0.6);">
-            <div class="light-head">
-              <div class="light-range-title">⚫ &gt; 45 核彈區 💣</div>
-              <div class="active-badge">當前區間 🔥</div>
-            </div>
-            <div class="light-desc">一年1-2次，閉眼買0050。</div>
+            <div class="light-range-title">⚫ &gt;45 核彈區 💣</div>
+            <div class="light-desc">閉眼買0050</div>
+            <div class="active-badge">🔥</div>
           </div>
+        </div>
+      </div>
 
+      <!-- 🇺🇸 美股 VIX 燈號 -->
+      <div class="board-card">
+        <div class="board-title">
+          <span>🇺🇸 美股 S&P500：VIX 恐慌燈號</span>
+          <span class="val-highlight" id="lbl-cur-vix">--</span>
+        </div>
+        <div class="lights-list" id="vix-lights-container">
+          <div class="light-stage dim" id="vix-stage-1" style="--light-color: var(--c-green); --light-color-glow: rgba(0,230,118,0.5);">
+            <div class="light-range-title">🟢 &lt;16 溫水煮青蛙區</div>
+            <div class="light-desc">多頭緩漲</div>
+            <div class="active-badge">🔥</div>
+          </div>
+          <div class="light-stage dim" id="vix-stage-2" style="--light-color: var(--c-yellow); --light-color-glow: rgba(255,234,0,0.5);">
+            <div class="light-range-title">🟡 16~18 緩漲區</div>
+            <div class="light-desc">高勝率加碼區</div>
+            <div class="active-badge">🔥</div>
+          </div>
+          <div class="light-stage dim" id="vix-stage-3" style="--light-color: var(--c-orange); --light-color-glow: rgba(255,145,0,0.5);">
+            <div class="light-range-title">🟠 18~22 驚嚇區</div>
+            <div class="light-desc">錯殺加碼起點</div>
+            <div class="active-badge">🔥</div>
+          </div>
+          <div class="light-stage dim" id="vix-stage-4" style="--light-color: var(--c-red); --light-color-glow: rgba(255,61,0,0.6);">
+            <div class="light-range-title">🔴 &gt;22 逃命區</div>
+            <div class="light-desc">閉眼加碼</div>
+            <div class="active-badge">🔥</div>
+          </div>
         </div>
       </div>
 
