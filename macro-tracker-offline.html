@@ -484,6 +484,11 @@
       white-space: nowrap;
     }
 
+    .fresh-dot {
+      margin-left: 4px;
+      font-size: 11px;
+    }
+
     .th-spark {
       display: block;
       height: 28px;
@@ -665,15 +670,6 @@
       </div>
     </header>
 
-    <!-- 【區塊 1】：資料更新時間參考 -->
-    <div class="entry-card">
-      <div class="card-title">⏰ 各項數據台灣時間公布/更新參考</div>
-      <div style="font-size:14px; color: var(--text-sub); line-height:1.7;">
-        （<code>update_macro_data.py</code> 自動抓取的時機）：
-        <div id="freshness-badges" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;"></div>
-      </div>
-    </div>
-
     <!-- 觸發加碼通知彈出橫幅 -->
     <div class="alert-banner" id="alert-banner">
       <div class="alert-banner-title">🚨 【策略加碼通知觸發！】</div>
@@ -816,12 +812,12 @@
         <thead>
           <tr>
             <th style="width: 140px;">日期</th>
-            <th><div class="th-label">VIXTWN (台) ✏️</div><div class="th-spark" id="spark-vixtwn"></div></th>
-            <th><div class="th-label">VIX (美) ✏️</div><div class="th-spark" id="spark-vix"></div></th>
-            <th><div class="th-label">布蘭特原油 ($) ✏️</div><div class="th-spark" id="spark-oil"></div></th>
-            <th><div class="th-label">10年美債 (%) ✏️</div><div class="th-spark" id="spark-us10y"></div></th>
-            <th><div class="th-label">利差 Spread (%) ✏️</div><div class="th-spark" id="spark-spread"></div></th>
-            <th><div class="th-label">美元指數 DXY ✏️</div><div class="th-spark" id="spark-dxy"></div></th>
+            <th><div class="th-label">VIXTWN (台) ✏️<span class="fresh-dot" id="fresh-vixtwn"></span></div><div class="th-spark" id="spark-vixtwn"></div></th>
+            <th><div class="th-label">VIX (美) ✏️<span class="fresh-dot" id="fresh-vix"></span></div><div class="th-spark" id="spark-vix"></div></th>
+            <th><div class="th-label">布蘭特原油 ($) ✏️<span class="fresh-dot" id="fresh-oil"></span></div><div class="th-spark" id="spark-oil"></div></th>
+            <th><div class="th-label">10年美債 (%) ✏️<span class="fresh-dot" id="fresh-us10y"></span></div><div class="th-spark" id="spark-us10y"></div></th>
+            <th><div class="th-label">利差 Spread (%) ✏️<span class="fresh-dot" id="fresh-spread"></span></div><div class="th-spark" id="spark-spread"></div></th>
+            <th><div class="th-label">美元指數 DXY ✏️<span class="fresh-dot" id="fresh-dxy"></span></div><div class="th-spark" id="spark-dxy"></div></th>
             <th style="width: 60px; text-align: center;">刪除</th>
           </tr>
         </thead>
@@ -1400,27 +1396,29 @@
       }
     }
 
+    // 簡化過的燈號：只留一個小圓點貼在走勢圖標題旁邊，細節（哪天的資料、抓取時間）
+    // 收進滑鼠懸停的 title 提示裡，畫面上不再堆一排文字。
     function renderFreshnessBadges() {
-      const container = document.getElementById('freshness-badges');
-      if (!container) return;
-
       const todayStr = new Date().toISOString().split('T')[0];
       const todayEntry = entries.find(e => e.date === todayStr);
       const meta = (todayEntry && todayEntry._meta) || {};
-      console.log('[DEBUG] renderFreshnessBadges: 瀏覽器判斷今天=', todayStr, '找到的今日資料=', todayEntry, '_meta=', meta);
 
-      container.innerHTML = FRESHNESS_FIELDS.map(f => {
+      FRESHNESS_FIELDS.forEach(f => {
+        const el = document.getElementById(`fresh-${f.key}`);
+        if (!el) return;
         const info = meta[f.key];
         if (!info || !info.asof) {
-          return `<span class="delta-badge delta-flat" style="border-left:3px solid ${f.color};">⚪ ${f.label} 尚無自動更新紀錄</span>`;
+          el.textContent = '⚪';
+          el.title = `${f.label}：尚無自動更新紀錄`;
+          return;
         }
         const expected = getExpectedAsof(f.key);
         const isFresh = info.asof >= expected;
-        const cls = isFresh ? 'delta-down' : 'delta-flat';
-        const icon = isFresh ? '🟢' : '⚪';
-        const note = isFresh ? '目前最新' : `尚未更新（現有 ${info.asof}，預期應有 ${expected}）`;
-        return `<span class="delta-badge ${cls}" style="border-left:3px solid ${f.color};" title="上次抓取: ${info.fetchedAt || '?'}">${icon} ${f.label} ${note}</span>`;
-      }).join('');
+        el.textContent = isFresh ? '🟢' : '⚪';
+        el.title = isFresh
+          ? `${f.label}：目前最新（${info.asof}）`
+          : `${f.label}：尚未更新（現有 ${info.asof}，預期應有 ${expected}）`;
+      });
     }
 
     const ANALYSIS_COOLDOWN_MS = 30000; // 完成後至少要等這麼久才能再按一次，避免連續呼叫 Gemini/連續 git commit
