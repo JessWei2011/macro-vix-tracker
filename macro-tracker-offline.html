@@ -804,17 +804,6 @@
           </div>
         </div>
         <div class="status-msg" id="arbitration-status" style="margin-top:14px; font-size:14px;"></div>
-
-        <div style="margin-top:18px; padding-top:16px; border-top:1px solid var(--card-border);">
-          <div style="font-size:15px; font-weight:700; color: var(--text-sub); margin-bottom:8px;">✍️ 糾正這份分析（累積成規則，未來分析會自動提醒 AI 遵守）</div>
-          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-start;">
-            <input type="text" id="correction-input" placeholder="例如：0050 傳導寫看跌但建議卻加碼，這樣矛盾"
-              style="flex:1; min-width:240px; background-color: var(--input-bg); border: 2px solid var(--input-border); border-radius: 8px; color: var(--text-main); font-size: 15px; padding: 8px 12px;">
-            <button class="btn btn-primary" id="submit-correction-btn">送出</button>
-          </div>
-          <div class="status-msg" id="correction-status" style="margin-top:8px; font-size:13px;"></div>
-          <div id="corrections-list" style="margin-top:10px; font-size:13px; color: var(--text-sub); line-height:1.7;"></div>
-        </div>
       </div>
     </div>
 
@@ -1566,55 +1555,9 @@
       } catch (e) {}
     }
 
-    async function loadCorrections() {
-      const listEl = document.getElementById('corrections-list');
-      if (!listEl) return;
-      try {
-        const resp = await fetch('./analysis_corrections.json?t=' + Date.now());
-        if (!resp.ok) return;
-        const rules = await resp.json();
-        if (!Array.isArray(rules) || rules.length === 0) { listEl.innerHTML = ''; return; }
-        listEl.innerHTML = '<div style="margin-bottom:4px;">目前累積規則（最新在上）：</div>' +
-          rules.slice(-10).reverse().map(r => `<div>• ${r.rule}</div>`).join('');
-      } catch (e) {}
-    }
-
-    document.getElementById('submit-correction-btn').addEventListener('click', async () => {
-      const input = document.getElementById('correction-input');
-      const statusEl = document.getElementById('correction-status');
-      const feedback = input.value.trim();
-      if (!feedback) return;
-      statusEl.style.color = 'var(--accent)';
-      statusEl.textContent = '⏳ 濃縮成規則中...';
-      try {
-        const resp = await fetch('/api/add-correction', {
-          method: 'POST',
-          body: JSON.stringify({ feedback }),
-        });
-        const data = await resp.json();
-        if (data.ok) {
-          statusEl.style.color = '#00e676';
-          statusEl.textContent = `✅ 已存成規則：${data.rule}` + (data.error ? `（⚠️ ${data.error}）` : '');
-          input.value = '';
-          loadCorrections();
-        } else {
-          statusEl.style.color = '#ff4d4d';
-          statusEl.textContent = '❌ ' + (data.error || '未知錯誤');
-        }
-      } catch (e) {
-        statusEl.style.color = '#ff4d4d';
-        statusEl.textContent = '❌ 無法連線本機伺服器 API: ' + e.message;
-      }
-    });
-
-    document.getElementById('correction-input').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') document.getElementById('submit-correction-btn').click();
-    });
-
     loadNotifyCfg();
     loadData();
     loadPastAnalysis();
-    loadCorrections();
   </script>
 </body>
 </html>

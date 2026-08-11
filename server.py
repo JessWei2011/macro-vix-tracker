@@ -33,8 +33,6 @@ DIR = Path(__file__).resolve().parent
 DATA_FILE = DIR / "macro_data.json"
 ANALYSIS_FILE = DIR / "macro_analysis.json"
 NOTIFY_CONFIG_FILE = DIR / "notify_config.json"
-CORRECTIONS_FILE = DIR / "analysis_corrections.json"
-MAX_CORRECTIONS_IN_PROMPT = 15
 PORT = 8934
 
 sys.path.insert(0, str(DIR))
@@ -98,27 +96,6 @@ ANTI_HALLUCINATION_NOTE = """【重要，違反視為分析失敗】上面「已
 以標記為準。禁止捏造這份數據裡沒出現過的具體數字。"""
 
 
-def build_corrections_block():
-    """使用者透過網頁上的糾正輸入框，針對過去分析的錯誤留下的規則，累積存在
-    analysis_corrections.json 裡。這裡把最近幾條規則組成一段文字，塞進 prompt
-    提醒模型「你以前犯過這些錯，這次不要再犯」——這不是真的模型訓練/學習，
-    LLM API 呼叫本身無狀態，但把過去的修正當成 in-context 提示，實務上確實
-    能明顯降低重複犯錯的機率。
-    """
-    if not CORRECTIONS_FILE.exists():
-        return ""
-    try:
-        rules = json.loads(CORRECTIONS_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        return ""
-    if not rules:
-        return ""
-    recent = rules[-MAX_CORRECTIONS_IN_PROMPT:]
-    lines = "\n".join(f"- {r['rule']}" for r in recent)
-    return f"""【使用者過去糾正累積的規則，務必遵守，這些是先前分析實際犯過的錯誤】
-{lines}"""
-
-
 ANALYSIS_QUESTIONS_WITH_SEARCH = """請針對最新一天相對前一天的變化，依序回答：
 1.【原因】今天變動最明顯的 1-2 項指標，用你查到的最新新聞/事件解釋「為什麼」會這樣變動（例如 OPEC+ 決策、地緣政治、Fed 談話、經濟數據公布等具體原因，不要只是複述數字）。
 2.【傳導】這個變動可能如何牽動其他資產／指數（例如黃金、美元指數、科技股、公債），方向是看漲還是看跌，並說明傳導邏輯。
@@ -144,7 +121,6 @@ ANALYSIS_QUESTIONS_DATA_ONLY = """你沒有網路搜尋能力，只能根據上�
 def build_prompt():
     table, recent = build_data_table()
     changes = build_changes_block(recent)
-    corrections = build_corrections_block()
     return f"""你是一位總經與跨資產分析師。以下是最近幾天的六項市場指標數據：
 
 {table}
@@ -152,8 +128,6 @@ def build_prompt():
 {changes}
 
 {ANTI_HALLUCINATION_NOTE}
-
-{corrections}
 
 {ANALYSIS_QUESTIONS_WITH_SEARCH}"""
 
@@ -318,7 +292,6 @@ def call_stage1_data_only_via_groq():
     """
     table, recent = build_data_table()
     changes = build_changes_block(recent)
-    corrections = build_corrections_block()
     prompt = f"""你是一位總經與跨資產分析師。以下是最近幾天的六項市場指標數據：
 
 {table}
@@ -326,8 +299,6 @@ def call_stage1_data_only_via_groq():
 {changes}
 
 {ANTI_HALLUCINATION_NOTE}
-
-{corrections}
 
 {ANALYSIS_QUESTIONS_DATA_ONLY}"""
 
@@ -414,7 +385,6 @@ def call_stage1_via_tavily_and_groq():
     search_context = "\n\n".join(search_contexts)
     table, recent = build_data_table()
     changes = build_changes_block(recent)
-    corrections = build_corrections_block()
     prompt = f"""你是一位總經與跨資產分析師。以下是最近幾天的六項市場指標數據：
 
 {table}
@@ -426,8 +396,6 @@ def call_stage1_via_tavily_and_groq():
 {search_context}
 
 {TAVILY_VERIFICATION_NOTE}
-
-{corrections}
 
 {ANALYSIS_QUESTIONS_WITH_SEARCH}"""
 
@@ -536,11 +504,9 @@ def compress_to_arrow_chain(raw_text, raw_truncated=False, news_style=False):
     免占用 Gemini 額度），失敗才退回 Gemini。
     """
     instruction = COMPRESS_INSTRUCTION_NEWS if news_style else COMPRESS_INSTRUCTION_DATA_ONLY
-    corrections = build_corrections_block()
     compress_input = (
         f"{raw_text}\n\n---\n"
         "提醒：【投資策略建議】只能是這 5 檔，不可替換成其他代號：QQQM、0050、IAU、00948B、00953B。"
-        f"\n\n{corrections}"
     )
     compressed_text, error, compress_truncated = call_groq_api(
         instruction, compress_input, max_tokens=1536
@@ -732,66 +698,6 @@ def _save_notify_config_locked(cfg):
     return None
 
 
-CONDENSE_CORRECTION_INSTRUCTION = """使用者剛剛針對一份總經分析的錯誤提出糾正/意見。你的任務是把這段話
-濃縮成「一條給 AI 以後遵守的規則」，用祈使句/規則語氣描述「以後應該怎麼做」，不是在複述這次錯了什麼。
-
-規則：
-- 只回傳這一條規則文字本身，不要任何其他說明、不要開場白、不要用引號包起來。
-- 不超過 40 個字。
-- 範例輸入：「0050 傳導寫看跌，投資建議卻寫加碼，這樣不對」
-  範例輸出：投資策略建議的立場方向必須跟傳導段落的淨結論一致，不可矛盾
-- 範例輸入：「你上次說油價漲，但其實資料是跌」
-  範例輸出：漲跌方向必須以提供的已計算方向標記為準，不可自行誤判"""
-
-
-def condense_correction(feedback):
-    rule, error, _truncated = call_groq_api(CONDENSE_CORRECTION_INSTRUCTION, feedback, max_tokens=100)
-    if not rule:
-        return None, f"濃縮糾正內容失敗: {error}"
-    return rule.strip().strip("「」\"'"), None
-
-
-def save_correction(feedback):
-    with GIT_LOCK:
-        return _save_correction_locked(feedback)
-
-
-def _save_correction_locked(feedback):
-    rule, error = condense_correction(feedback)
-    if not rule:
-        return None, error
-
-    result = _git_pull_rebase_with_retry(DIR)
-    if result.returncode != 0:
-        return None, f"git pull 失敗，未儲存（請手動處理後重新整理頁面重試）: {result.stderr.strip()}"
-
-    rules = []
-    if CORRECTIONS_FILE.exists():
-        try:
-            rules = json.loads(CORRECTIONS_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            rules = []
-    rules.append({
-        "date": datetime.now().astimezone().isoformat(timespec="seconds"),
-        "feedback": feedback,
-        "rule": rule,
-    })
-    CORRECTIONS_FILE.write_text(json.dumps(rules, indent=2, ensure_ascii=False), encoding="utf-8")
-
-    subprocess.run(["git", "add", "analysis_corrections.json"], cwd=DIR, capture_output=True, text=True)
-    commit = subprocess.run(
-        ["git", "commit", "-m", "Add analysis correction rule"], cwd=DIR, capture_output=True, text=True
-    )
-    commit_output = commit.stdout + commit.stderr
-    nothing_changed = "nothing to commit" in commit_output or "nothing added to commit" in commit_output
-    if commit.returncode != 0 and not nothing_changed:
-        return rule, f"規則已濃縮，但 git commit 失敗: {commit.stderr.strip()}"
-    push = subprocess.run(["git", "push"], cwd=DIR, capture_output=True, text=True)
-    if push.returncode != 0:
-        return rule, f"規則已濃縮並 commit，但 git push 失敗（請手動執行 push.bat）: {push.stderr.strip()}"
-    return rule, None
-
-
 def save_analysis(provider, text, raw_text=None):
     """寫入分析結果並同步到 git，讓兩台電腦都看得到同一份最新結果。
 
@@ -892,28 +798,6 @@ class Handler(SimpleHTTPRequestHandler):
                 error = save_notify_config(cfg)
                 body = json.dumps({"ok": error is None, "error": error}, ensure_ascii=False).encode("utf-8")
                 self.send_response(200 if error is None else 500)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-            return
-
-        if parsed.path == "/api/add-correction":
-            length = int(self.headers.get("Content-Length", 0))
-            try:
-                payload = json.loads(self.rfile.read(length).decode("utf-8"))
-                feedback = payload.get("feedback", "").strip()
-            except Exception:
-                feedback = ""
-            if not feedback:
-                body = json.dumps({"ok": False, "error": "請輸入糾正內容"}, ensure_ascii=False).encode("utf-8")
-                self.send_response(400)
-            else:
-                rule, error = save_correction(feedback)
-                body = json.dumps(
-                    {"ok": rule is not None, "rule": rule, "error": error}, ensure_ascii=False
-                ).encode("utf-8")
-                self.send_response(200 if rule is not None else 500)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
