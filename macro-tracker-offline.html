@@ -814,6 +814,9 @@
 
     <!-- 【區塊 3】：數值區 / 表格顯示區 -->
     <div class="status-msg" id="cell-edit-status" style="margin-bottom:4px;"></div>
+    <div style="margin-bottom:10px;">
+      <button class="btn btn-secondary" id="toggle-history-btn">📖 展開歷史數據</button>
+    </div>
 
     <div class="table-container">
       <table>
@@ -1244,6 +1247,9 @@
       });
     }
 
+    // 表格只留最新一天的資料在外層，其他歷史資料收起來，比照 AI 分析展開的模式。
+    let historyRowsExpanded = false;
+
     function render() {
       const tbody = document.getElementById('table-body');
       const countEl = document.getElementById('db-count');
@@ -1264,9 +1270,12 @@
       let html = '';
       sorted.forEach((item, index) => {
         const prevItem = sorted[index + 1];
+        const rowAttrs = index === 0
+          ? ''
+          : ` class="history-row" style="display:${historyRowsExpanded ? 'table-row' : 'none'};"`;
 
         html += `
-          <tr>
+          <tr${rowAttrs}>
             <td class="date-cell">${item.date}</td>
             <td class="num-cell" onclick="startEditCell(this, '${item.date}', 'vixtwn', ${item.vixtwn})">
               ${renderCellContent(item, prevItem, sorted, index, 'vixtwn')}
@@ -1525,6 +1534,14 @@
       const isHidden = panel.style.display === 'none';
       panel.style.display = isHidden ? 'block' : 'none';
       btn.textContent = isHidden ? '📕 收起分析結果' : '📖 展開分析結果';
+    });
+
+    document.getElementById('toggle-history-btn').addEventListener('click', () => {
+      historyRowsExpanded = !historyRowsExpanded;
+      document.querySelectorAll('#table-body .history-row').forEach(tr => {
+        tr.style.display = historyRowsExpanded ? 'table-row' : 'none';
+      });
+      document.getElementById('toggle-history-btn').textContent = historyRowsExpanded ? '📕 收起歷史數據' : '📖 展開歷史數據';
     });
 
     document.getElementById('arbitration-prompt-btn').addEventListener('click', async () => {
