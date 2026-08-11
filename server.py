@@ -448,6 +448,36 @@ def _git_pull_rebase_with_retry(cwd):
     return result
 
 
+def save_macro_data(entries):
+    """給表格內聯編輯用：把使用者手動改的數字真正寫回 macro_data.json 並 git push。
+    在這之前 saveData() 只寫 localStorage，關掉伺服器/瀏覽器後改動就沒了——因為
+    下次開網頁 loadData() 會直接 fetch macro_data.json 覆蓋掉 localStorage 的內容，
+    而檔案本身從來沒被寫過。跟 save_notify_config() 走一樣的 pull-write-commit-push 套路。
+    """
+    with GIT_LOCK:
+        return _save_macro_data_locked(entries)
+
+
+def _save_macro_data_locked(entries):
+    result = _git_pull_rebase_with_retry(DIR)
+    if result.returncode != 0:
+        return f"git pull 失敗，未儲存（請手動處理後重新整理頁面重試）: {result.stderr.strip()}"
+    sorted_entries = sorted(entries, key=lambda e: e["date"])
+    DATA_FILE.write_text(json.dumps(sorted_entries, indent=2, ensure_ascii=False), encoding="utf-8")
+    subprocess.run(["git", "add", "macro_data.json"], cwd=DIR, capture_output=True, text=True)
+    commit = subprocess.run(
+        ["git", "commit", "-m", "Manual edit to macro_data.json via table"], cwd=DIR, capture_output=True, text=True
+    )
+    commit_output = commit.stdout + commit.stderr
+    nothing_changed = "nothing to commit" in commit_output or "nothing added to commit" in commit_output
+    if commit.returncode != 0 and not nothing_changed:
+        return f"已存到本機，但 git commit 失敗: {commit.stderr.strip()}"
+    push = subprocess.run(["git", "push"], cwd=DIR, capture_output=True, text=True)
+    if push.returncode != 0:
+        return f"已存到本機並 commit，但 git push 失敗（請手動執行 push.bat）: {push.stderr.strip()}"
+    return None
+
+
 def save_notify_config(cfg):
     with GIT_LOCK:
         return _save_notify_config_locked(cfg)
@@ -570,6 +600,25 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_response(400)
             else:
                 error = save_notify_config(cfg)
+                body = json.dumps({"ok": error is None, "error": error}, ensure_ascii=False).encode("utf-8")
+                self.send_response(200 if error is None else 500)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        if parsed.path == "/api/save-macro-data":
+            length = int(self.headers.get("Content-Length", 0))
+            try:
+                entries = json.loads(self.rfile.read(length).decode("utf-8"))
+            except Exception:
+                entries = None
+            if not isinstance(entries, list) or not all(isinstance(e, dict) and "date" in e for e in entries):
+                body = json.dumps({"ok": False, "error": "無效的資料內容"}).encode("utf-8")
+                self.send_response(400)
+            else:
+                error = save_macro_data(entries)
                 body = json.dumps({"ok": error is None, "error": error}, ensure_ascii=False).encode("utf-8")
                 self.send_response(200 if error is None else 500)
             self.send_header("Content-Type", "application/json; charset=utf-8")

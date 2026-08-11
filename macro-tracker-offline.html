@@ -809,6 +809,7 @@
 
     <!-- 【區塊 3】：數值區 / 表格顯示區 -->
     <div class="edit-tip">💡 提示：點擊數字即可內聯修改。</div>
+    <div class="status-msg" id="cell-edit-status" style="margin-bottom:10px; min-height:20px;"></div>
 
     <div class="table-container">
       <table>
@@ -993,10 +994,39 @@
       localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
     }
 
-    // 網頁上手動改的數字只存進 localStorage 當畫面暫存；真正落地寫進 macro_data.json
-    // 並 push 到 GitHub 的是 update_macro_data.py，兩台電腦的同步都靠它 + git。
+    // 表格內聯編輯的數字：先存 localStorage 當畫面暫存，同時透過伺服器把改動
+    // 真正寫回 macro_data.json 並 git push，不然關掉伺服器/瀏覽器後這筆改動就
+    // 只活在這台電腦的 localStorage 裡，下次重新從檔案 fetch 就會被蓋掉、憑空消失
+    // （這正是之前發生過的 bug：手動改的 VIXTWN 數字沒 push，重開就不見了）。
     async function saveData() {
       saveDataLocalOnly();
+      const statusEl = document.getElementById('cell-edit-status');
+      try {
+        const resp = await fetch('/api/save-macro-data', {
+          method: 'POST',
+          body: JSON.stringify(entries),
+        });
+        const data = await resp.json();
+        if (data.ok) {
+          if (statusEl) {
+            statusEl.style.color = '#00e676';
+            statusEl.textContent = '✅ 已存檔並同步到 GitHub';
+            setTimeout(() => { if (statusEl.textContent.includes('已存檔')) statusEl.textContent = ''; }, 3000);
+          }
+        } else {
+          console.error('[DEBUG] 同步 macro_data.json 到 GitHub 失敗:', data.error);
+          if (statusEl) {
+            statusEl.style.color = '#ff4d4d';
+            statusEl.textContent = '⚠️ 已存本機，但同步到 GitHub 失敗：' + data.error;
+          }
+        }
+      } catch (e) {
+        console.error('[DEBUG] 無法連線本機伺服器 API，這筆修改只存在這台電腦（localStorage），關閉分頁後會遺失:', e);
+        if (statusEl) {
+          statusEl.style.color = '#ff4d4d';
+          statusEl.textContent = '⚠️ 無法連線伺服器，這筆修改只存在瀏覽器暫存，關閉分頁後會遺失（請確認是用 update.bat 開啟的網頁）';
+        }
+      }
     }
 
     function downloadMacroDataJson() {
