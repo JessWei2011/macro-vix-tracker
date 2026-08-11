@@ -1396,8 +1396,15 @@
       }
     }
 
-    // 簡化過的燈號：只留一個小圓點貼在走勢圖標題旁邊，細節（哪天的資料、抓取時間）
-    // 收進滑鼠懸停的 title 提示裡，畫面上不再堆一排文字。
+    // 簡化過的燈號：小圓點 + 資料實際日期（MM/DD）直接貼在走勢圖標題旁邊，不藏進提示框。
+    // 綠燈的意思是「以台灣現在這個時間點來看，這已經是抓得到的最新版本」，不是「日期=台灣今天」——
+    // 美股類資料（VIX/原油/美債/DXY）來源自己標記的日期本來就常常是台灣的前一天，這是正常現象，
+    // 直接把日期顯示出來，才不會誤以為綠燈=今天。
+    function formatShortDate(dateStr) {
+      const parts = dateStr.split('-');
+      return parts.length === 3 ? `${parts[1]}/${parts[2]}` : dateStr;
+    }
+
     function renderFreshnessBadges() {
       const todayStr = new Date().toISOString().split('T')[0];
       const todayEntry = entries.find(e => e.date === todayStr);
@@ -1414,9 +1421,9 @@
         }
         const expected = getExpectedAsof(f.key);
         const isFresh = info.asof >= expected;
-        el.textContent = isFresh ? '🟢' : '⚪';
+        el.textContent = `${isFresh ? '🟢' : '⚪'}${formatShortDate(info.asof)}`;
         el.title = isFresh
-          ? `${f.label}：目前最新（${info.asof}）`
+          ? `${f.label}：目前最新（資料日期 ${info.asof}）`
           : `${f.label}：尚未更新（現有 ${info.asof}，預期應有 ${expected}）`;
       });
     }
