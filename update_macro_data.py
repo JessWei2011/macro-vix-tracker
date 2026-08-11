@@ -124,28 +124,6 @@ def fetch_spread():
         return None, None
 
 
-def fetch_inst_net():
-    """三大法人合計買賣超金額（新台幣元換算成億元），來源：TWSE 官方公開 API（免金鑰）。"""
-    try:
-        import requests
-        resp = requests.get("https://www.twse.com.tw/rwd/zh/fund/BFI82U?response=json", timeout=10)
-        resp.raise_for_status()
-        payload = resp.json()
-        if payload.get("stat") != "OK":
-            return None, None
-        row_date = payload.get("date")
-        if row_date != date.today().strftime("%Y%m%d"):
-            return None, None  # 證交所還沒發布今天的統計
-        row = next((r for r in payload["data"] if r[0] == "合計"), None)
-        if row is None:
-            return None, None
-        net_yuan = float(row[3].replace(",", ""))
-        return round(net_yuan / 1e8, 2), date.today().isoformat()
-    except Exception as e:
-        print(f"[警告] 抓取三大法人買賣超失敗: {e}")
-        return None, None
-
-
 def fetch_vixtwn():
     today = date.today()
     yyyymm = today.strftime("%Y%m")
@@ -179,9 +157,6 @@ def get_expected_asof(key, now):
     h = now.hour
     if key == "vixtwn":
         return (today if h >= 14 else today - timedelta(days=1)).isoformat()
-    if key == "instnet":
-        # 三大法人買賣金額統計表比 VIXTWN 慢，通常要下午 15 點後才會有當天完整數字。
-        return (today if h >= 15 else today - timedelta(days=1)).isoformat()
     if key in ("vix", "us10y", "dxy"):
         return (today - timedelta(days=1) if h >= 4 else today - timedelta(days=2)).isoformat()
     if key == "oil":
@@ -205,14 +180,13 @@ def main():
         "us10y": fetch_us10y(),
         "spread": fetch_spread(),
         "dxy": fetch_dxy(),
-        "instnet": fetch_inst_net(),
     }
 
     entry = next((e for e in entries if e["date"] == today), None)
     if entry is None:
         entry = {
             "date": today, "vixtwn": None, "vix": None, "oil": None,
-            "us10y": None, "spread": None, "dxy": None, "instnet": None,
+            "us10y": None, "spread": None, "dxy": None,
         }
         entries.append(entry)
 
