@@ -801,12 +801,12 @@
         <thead>
           <tr>
             <th style="width: 140px;">日期</th>
-            <th>VIXTWN (台) ✏️</th>
-            <th>VIX (美) ✏️</th>
-            <th>布蘭特原油 ($) ✏️</th>
-            <th>10年美債 (%) ✏️</th>
-            <th>利差 Spread (%) ✏️</th>
-            <th>美元指數 DXY ✏️</th>
+            <th>VIXTWN (台) ✏️<span id="spark-vixtwn"></span></th>
+            <th>VIX (美) ✏️<span id="spark-vix"></span></th>
+            <th>布蘭特原油 ($) ✏️<span id="spark-oil"></span></th>
+            <th>10年美債 (%) ✏️<span id="spark-us10y"></span></th>
+            <th>利差 Spread (%) ✏️<span id="spark-spread"></span></th>
+            <th>美元指數 DXY ✏️<span id="spark-dxy"></span></th>
             <th style="width: 60px; text-align: center;">刪除</th>
           </tr>
         </thead>
@@ -1145,6 +1145,48 @@
       return activeAlerts;
     }
 
+    // 小走勢圖：白底、綠框、粗紅折線，不畫刻度，只求一眼看出方向。
+    function buildSparklineSVG(points) {
+      const W = 100, H = 26, PAD = 3;
+      const boxStyle = 'background:#ffffff; border:2px solid #1e9e50; border-radius:4px; margin-top:4px; overflow:hidden;';
+
+      if (points.length < 2) {
+        return `<div style="${boxStyle} height:${H}px;"></div>`;
+      }
+
+      const min = Math.min(...points);
+      const max = Math.max(...points);
+      const range = max - min || 1;
+      const stepX = (W - PAD * 2) / (points.length - 1);
+      const coords = points.map((v, i) => {
+        const x = PAD + i * stepX;
+        const y = PAD + (H - PAD * 2) * (1 - (v - min) / range);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      }).join(' ');
+
+      return `<div style="${boxStyle}">
+        <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" style="display:block;">
+          <polyline points="${coords}" fill="none" stroke="#e53935" stroke-width="2.5"
+            vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </div>`;
+    }
+
+    function renderSparklines() {
+      const fields = ['vixtwn', 'vix', 'oil', 'us10y', 'spread', 'dxy'];
+      // 近 10~14 天：資料本身就只有交易日，沒有假日資料自然跳過，直接取最後 14 筆即可。
+      const asc = [...entries].sort((a, b) => a.date.localeCompare(b.date)).slice(-14);
+
+      fields.forEach(key => {
+        const points = asc
+          .map(e => e[key])
+          .filter(v => v !== null && v !== undefined && v !== '' && !isNaN(v))
+          .map(v => parseFloat(v));
+        const el = document.getElementById(`spark-${key}`);
+        if (el) el.innerHTML = buildSparklineSVG(points);
+      });
+    }
+
     function render() {
       const tbody = document.getElementById('table-body');
       const countEl = document.getElementById('db-count');
@@ -1155,6 +1197,7 @@
       updateIndicatorLights(sorted);
       checkNotifications(sorted);
       renderFreshnessBadges();
+      renderSparklines();
 
       if (sorted.length === 0) {
         tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color: var(--text-sub); padding: 40px;">目前無數據，請執行 update_macro_data.py 抓取。</td></tr>`;
