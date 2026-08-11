@@ -852,6 +852,15 @@
             % 時，自動觸發 IAU 抄底通知！
           </div>
         </div>
+
+        <div class="notify-item-setting">
+          <div class="notify-item-title">📢 通知 4：0050加碼通知(抄底)</div>
+          <div class="notify-item-desc">
+            當天 VIXTWN 小於等於
+            <input type="number" step="0.1" class="notify-input" id="cfg-n4-vixtwn">
+            時，自動觸發 0050 抄底通知！
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -864,19 +873,22 @@
     let notifyCfg = {
       n1_vix: 21.0,
       n2_us10y: 4.65,
-      n3_us10y: 4.85
+      n3_us10y: 4.85,
+      n4_vixtwn: 32.5
     };
 
     function applyNotifyCfgToInputs() {
       document.getElementById('cfg-n1-vix').value = notifyCfg.n1_vix;
       document.getElementById('cfg-n2-us10y').value = notifyCfg.n2_us10y;
       document.getElementById('cfg-n3-us10y').value = notifyCfg.n3_us10y;
+      document.getElementById('cfg-n4-vixtwn').value = notifyCfg.n4_vixtwn;
     }
 
     function applyParsedNotifyCfg(parsed) {
       if (parsed.n1_vix !== undefined) notifyCfg.n1_vix = parseFloat(parsed.n1_vix);
       if (parsed.n2_us10y !== undefined) notifyCfg.n2_us10y = parseFloat(parsed.n2_us10y);
       if (parsed.n3_us10y !== undefined) notifyCfg.n3_us10y = parseFloat(parsed.n3_us10y);
+      if (parsed.n4_vixtwn !== undefined) notifyCfg.n4_vixtwn = parseFloat(parsed.n4_vixtwn);
     }
 
     async function loadNotifyCfg() {
@@ -903,10 +915,12 @@
       const n1 = parseFloat(document.getElementById('cfg-n1-vix').value);
       const n2 = parseFloat(document.getElementById('cfg-n2-us10y').value);
       const n3 = parseFloat(document.getElementById('cfg-n3-us10y').value);
+      const n4 = parseFloat(document.getElementById('cfg-n4-vixtwn').value);
 
       if (!isNaN(n1)) notifyCfg.n1_vix = n1;
       if (!isNaN(n2)) notifyCfg.n2_us10y = n2;
       if (!isNaN(n3)) notifyCfg.n3_us10y = n3;
+      if (!isNaN(n4)) notifyCfg.n4_vixtwn = n4;
 
       localStorage.setItem(NOTIFY_CONFIG_KEY, JSON.stringify(notifyCfg));
       render();
@@ -1126,6 +1140,7 @@
 
       const effVix = getEffectiveMetric(sortedDesc, 0, 'vix');
       const effUs10y = getEffectiveMetric(sortedDesc, 0, 'us10y');
+      const effVixTwn = getEffectiveMetric(sortedDesc, 0, 'vixtwn');
 
       const activeAlerts = [];
 
@@ -1147,6 +1162,13 @@
         activeAlerts.push({
           title: 'IAU加碼通知(抄底)',
           msg: `最新 10年美債殖利率 (${effUs10y.val.toFixed(2)}%) 已大於等於 ${notifyCfg.n3_us10y}% 抄底門檻！建議執行 IAU 抄底加碼！`
+        });
+      }
+
+      if (effVixTwn.val !== null && effVixTwn.val <= notifyCfg.n4_vixtwn) {
+        activeAlerts.push({
+          title: '0050加碼通知(抄底)',
+          msg: `最新 VIXTWN (${effVixTwn.val.toFixed(2)}) 已低於等於 ${notifyCfg.n4_vixtwn} 抄底門檻！建議執行 0050 抄底加碼！`
         });
       }
 
@@ -1307,7 +1329,7 @@
       });
     };
 
-    ['cfg-n1-vix', 'cfg-n2-us10y', 'cfg-n3-us10y'].forEach(id => {
+    ['cfg-n1-vix', 'cfg-n2-us10y', 'cfg-n3-us10y', 'cfg-n4-vixtwn'].forEach(id => {
       document.getElementById(id).addEventListener('change', saveNotifyCfg);
       document.getElementById(id).addEventListener('blur', saveNotifyCfg);
     });
