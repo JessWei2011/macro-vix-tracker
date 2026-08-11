@@ -479,6 +479,20 @@
       border-bottom: 2px solid var(--card-border);
     }
 
+    .th-label {
+      display: block;
+      white-space: nowrap;
+    }
+
+    .th-spark {
+      display: block;
+      height: 28px;
+      margin-top: 8px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.04);
+      overflow: hidden;
+    }
+
     td {
       padding: 14px 12px;
       border-bottom: 1px solid var(--card-border);
@@ -783,7 +797,7 @@
           </div>
           <div class="analysis-column">
             <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
-              <button class="btn btn-secondary" id="analyze-fallback-btn">🟠 Tavily+Groq</button>
+              <button class="btn btn-secondary" id="analyze-fallback-btn">🟠 Groq（純數據）</button>
               <span class="status-msg" id="analysis-status-fallback" style="font-size:13px;"></span>
             </div>
             <div id="analysis-result-fallback" class="analysis-text">尚未產生分析。</div>
@@ -801,12 +815,12 @@
         <thead>
           <tr>
             <th style="width: 140px;">日期</th>
-            <th>VIXTWN (台) ✏️<span id="spark-vixtwn"></span></th>
-            <th>VIX (美) ✏️<span id="spark-vix"></span></th>
-            <th>布蘭特原油 ($) ✏️<span id="spark-oil"></span></th>
-            <th>10年美債 (%) ✏️<span id="spark-us10y"></span></th>
-            <th>利差 Spread (%) ✏️<span id="spark-spread"></span></th>
-            <th>美元指數 DXY ✏️<span id="spark-dxy"></span></th>
+            <th><div class="th-label">VIXTWN (台) ✏️</div><div class="th-spark" id="spark-vixtwn"></div></th>
+            <th><div class="th-label">VIX (美) ✏️</div><div class="th-spark" id="spark-vix"></div></th>
+            <th><div class="th-label">布蘭特原油 ($) ✏️</div><div class="th-spark" id="spark-oil"></div></th>
+            <th><div class="th-label">10年美債 (%) ✏️</div><div class="th-spark" id="spark-us10y"></div></th>
+            <th><div class="th-label">利差 Spread (%) ✏️</div><div class="th-spark" id="spark-spread"></div></th>
+            <th><div class="th-label">美元指數 DXY ✏️</div><div class="th-spark" id="spark-dxy"></div></th>
             <th style="width: 60px; text-align: center;">刪除</th>
           </tr>
         </thead>
@@ -1145,31 +1159,40 @@
       return activeAlerts;
     }
 
-    // 小走勢圖：白底、綠框、粗紅折線，不畫刻度，只求一眼看出方向。
+    // 小走勢圖：無邊框、跟著卡片深色背景走，依漲跌上色（紅漲綠跌，跟頁面其他地方的漲跌配色一致），
+    // 折線下方帶一點漸層填色，是常見金融 App 的 sparkline 風格。
     function buildSparklineSVG(points) {
-      const W = 100, H = 26, PAD = 3;
-      const boxStyle = 'background:#ffffff; border:2px solid #1e9e50; border-radius:4px; margin-top:4px; overflow:hidden;';
+      if (points.length < 2) return '';
 
-      if (points.length < 2) {
-        return `<div style="${boxStyle} height:${H}px;"></div>`;
-      }
-
+      const W = 100, H = 28, PAD_X = 2, PAD_Y = 5;
       const min = Math.min(...points);
       const max = Math.max(...points);
       const range = max - min || 1;
-      const stepX = (W - PAD * 2) / (points.length - 1);
-      const coords = points.map((v, i) => {
-        const x = PAD + i * stepX;
-        const y = PAD + (H - PAD * 2) * (1 - (v - min) / range);
-        return `${x.toFixed(1)},${y.toFixed(1)}`;
-      }).join(' ');
+      const stepX = (W - PAD_X * 2) / (points.length - 1);
+      const xy = points.map((v, i) => [
+        PAD_X + i * stepX,
+        PAD_Y + (H - PAD_Y * 2) * (1 - (v - min) / range),
+      ]);
 
-      return `<div style="${boxStyle}">
-        <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" style="display:block;">
-          <polyline points="${coords}" fill="none" stroke="#e53935" stroke-width="2.5"
-            vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </div>`;
+      const isFlat = points[points.length - 1] === points[0];
+      const isUp = points[points.length - 1] > points[0];
+      const color = isFlat ? '#8892a0' : (isUp ? '#ff4d4d' : '#00e676');
+
+      const linePoints = xy.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+      const areaPoints = `${PAD_X.toFixed(1)},${H} ${linePoints} ${(W - PAD_X).toFixed(1)},${H}`;
+      const gradId = 'sparkGrad' + Math.random().toString(36).slice(2, 9);
+
+      return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="100%" preserveAspectRatio="none" style="display:block;">
+        <defs>
+          <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${color}" stop-opacity="0.35"/>
+            <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <polygon points="${areaPoints}" fill="url(#${gradId})" stroke="none"/>
+        <polyline points="${linePoints}" fill="none" stroke="${color}" stroke-width="2"
+          vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>`;
     }
 
     function renderSparklines() {

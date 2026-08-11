@@ -44,10 +44,6 @@ try:
     from ai_keys_local import GROQ_API_KEY
 except ImportError:
     GROQ_API_KEY = ""
-try:
-    from ai_keys_local import TAVILY_API_KEY
-except ImportError:
-    TAVILY_API_KEY = ""
 
 FIELD_LABELS = {
     "vixtwn": "VIXTWN(台股期貨波動率指數)",
@@ -60,15 +56,43 @@ FIELD_LABELS = {
 
 
 def build_data_table():
+    """回傳 (表格文字, 依日期排序的 recent 清單)，recent 給 build_changes_block() 算漲跌方向用。"""
     entries = json.loads(DATA_FILE.read_text(encoding="utf-8"))
     recent = entries[-10:]
-    return "\n".join(
+    table = "\n".join(
         f"{e['date']}: " + ", ".join(f"{FIELD_LABELS[k]}={e.get(k)}" for k in FIELD_LABELS)
         for e in recent
     )
+    return table, recent
 
 
-ANALYSIS_QUESTIONS = """請針對最新一天相對前一天的變化，依序回答：
+def build_changes_block(recent):
+    """把「最新一天 vs 前一天」的漲跌方向直接在 Python 算好、白紙黑字告訴模型，
+    不要讓 LLM 自己去比較數字大小——這是先前發生「原油明明上漲，模型卻分析成
+    下跌」這種方向判斷失誤的直接防呆，比在 prompt 裡千叮嚀萬囑咐「不要看錯」有效多了。
+    """
+    if len(recent) < 2:
+        return "（資料不足，無法計算變化）"
+    latest, prev = recent[-1], recent[-2]
+    lines = [f"【已計算好的漲跌方向，請直接採用，不要自己重新比較數字】最新一天（{latest['date']}）相對前一天（{prev['date']}）："]
+    for k, label in FIELD_LABELS.items():
+        v_new, v_old = latest.get(k), prev.get(k)
+        if v_new is None or v_old is None:
+            lines.append(f"- {label}: 缺值，無法判斷方向")
+            continue
+        diff = v_new - v_old
+        direction = "持平" if abs(diff) < 1e-9 else ("上升" if diff > 0 else "下降")
+        sign = "+" if diff >= 0 else ""
+        lines.append(f"- {label}: {v_old} --> {v_new}（{sign}{diff:.3f}，{direction}）")
+    return "\n".join(lines)
+
+
+ANTI_HALLUCINATION_NOTE = """【重要，違反視為分析失敗】上面「已計算好的漲跌方向」是唯一正確答案，你的分析裡每一個
+漲跌方向判斷都必須跟這個標記完全一致，禁止自己重新判斷、禁止跟標記矛盾，就算你覺得某個方向不合理也一樣
+以標記為準。禁止捏造這份數據裡沒出現過的具體數字。"""
+
+
+ANALYSIS_QUESTIONS_WITH_SEARCH = """請針對最新一天相對前一天的變化，依序回答：
 1.【原因】今天變動最明顯的 1-2 項指標，用你查到的最新新聞/事件解釋「為什麼」會這樣變動（例如 OPEC+ 決策、地緣政治、Fed 談話、經濟數據公布等具體原因，不要只是複述數字）。
 2.【傳導】這個變動可能如何牽動其他資產／指數（例如黃金、美元指數、科技股、公債），方向是看漲還是看跌，並說明傳導邏輯。
 3.【投資策略建議】依據這 6 項數據的走勢，針對以下 5 檔標的分別給出具體策略建議：QQQM、0050（台股大盤ETF）、IAU（黃金）、00948B、00953B。
@@ -77,13 +101,31 @@ ANALYSIS_QUESTIONS = """請針對最新一天相對前一天的變化，依序�
 請用繁體中文回答，段落分明。"""
 
 
+ANALYSIS_QUESTIONS_DATA_ONLY = """你沒有網路搜尋能力，只能根據上面提供的數據本身和一般總經知識推理，
+禁止假裝引用任何具體新聞事件、報導或數據來源，禁止編造任何上面沒提供的資訊。
+
+請針對最新一天相對前一天的變化，依序回答：
+1.【原因】今天變動最明顯的 1-2 項指標，依據總經常理推論「可能」的驅動邏輯（例如「原油上漲通常反映
+   供給收緊或地緣風險升溫的市場定價」），用詞要清楚是根據數據走勢的推論，不要寫成好像有具體新聞來源一樣。
+2.【傳導】這個變動可能如何牽動其他資產／指數（例如黃金、美元指數、科技股、公債），方向是看漲還是看跌，並說明傳導邏輯。
+3.【投資策略建議】依據這 6 項數據的走勢，針對以下 5 檔標的分別給出具體策略建議：QQQM、0050（台股大盤ETF）、IAU（黃金）、00948B、00953B。
+   每一檔請明確給出「緊抱／加碼／減碼／出場」其中一種立場，並說明為什麼（要連回前面①②的因果邏輯）。
+
+請用繁體中文回答，段落分明。"""
+
+
 def build_prompt():
-    table = build_data_table()
+    table, recent = build_data_table()
+    changes = build_changes_block(recent)
     return f"""你是一位總經與跨資產分析師。以下是最近幾天的六項市場指標數據：
 
 {table}
 
-{ANALYSIS_QUESTIONS}"""
+{changes}
+
+{ANTI_HALLUCINATION_NOTE}
+
+{ANALYSIS_QUESTIONS_WITH_SEARCH}"""
 
 
 COMPRESS_INSTRUCTION = """你的任務是把輸入的總經分析文字，濃縮成精簡的因果箭頭鏈格式，只做濃縮改寫，禁止新增原文沒有的資訊，禁止替換或發明原文沒提到的資產代號。
@@ -218,75 +260,26 @@ def call_groq_api(system_instruction, user_text, max_tokens=1024):
     return (text or None), (None if text else "Groq 沒有回傳文字內容"), truncated
 
 
-def call_tavily_search(query, max_results=5):
-    """Gemini 的 google_search 額度用完時，用這個當替代的搜尋來源。
-    Tavily 回傳的是已經整理過的網頁摘要（title/content/url），可以直接塞進
-    LLM prompt 當作「查到的新聞」使用，不用自己再寫爬蟲/解析 HTML。
+def call_stage1_data_only_via_groq():
+    """純數據分析路線（不查新聞）：只根據我們自己資料庫裡的數據走勢，交給 Groq 推理。
+
+    原本這裡是查 Tavily 抓新聞片段當背景資料，但實測 Tavily 查到的東西常常不準，
+    導致分析出現「原油明明上漲，卻寫成下跌」這種基本方向都判斷錯的離譜結果——
+    問題不在「有沒有新聞佐證」，而是連我們自己提供的數字都會判斷錯。與其讓模型
+    邊查（不可靠的）新聞邊做因果推論、放大出錯機會，不如直接拿掉查新聞這一步，
+    只讓它老老實實根據 build_prompt() 裡已經算好的漲跌方向和數據本身做推理。
     """
-    if not TAVILY_API_KEY:
-        return None, "尚未設定 TAVILY_API_KEY（請在 ai_keys_local.py 填入）"
-    try:
-        resp = requests.post(
-            "https://api.tavily.com/search",
-            json={
-                "api_key": TAVILY_API_KEY,
-                "query": query,
-                "search_depth": "basic",
-                "max_results": max_results,
-                "include_answer": False,
-            },
-            timeout=30,
-        )
-    except requests.RequestException as e:
-        return None, f"Tavily 連線失敗: {e}"
-    if not resp.ok:
-        return None, f"Tavily API 錯誤 {resp.status_code}: {resp.text[:500]}"
-    results = resp.json().get("results", [])
-    if not results:
-        return None, "Tavily 沒有搜尋到結果"
-    formatted = "\n\n".join(
-        f"【{r.get('title', '')}】\n{r.get('content', '')[:400]}\n來源: {r.get('url', '')}"
-        for r in results
-    )
-    return formatted, None
-
-
-TAVILY_SEARCH_QUERIES = [
-    "VIX恐慌指數 布蘭特原油 美國10年公債殖利率 高收益債利差 今日財經新聞",
-    # 單獨開一個查詢專門找 Fed 降息機率／就業數據這類「利率預期」催化劑，因為
-    # 這類新聞常常是黃金、美元、公債同時變動的關鍵驅動，但不見得會被上面那組
-    # 偏指標名稱的關鍵字搜到（實測就漏掉過一次非農就業→降息機率→黃金上漲的鏈）。
-    "Fed 聯準會 降息機率 非農就業 CPI 通膨 最新消息",
-]
-
-
-def call_stage1_via_tavily_and_groq():
-    """Gemini 的 google_search 額度用完（階段一失敗）時的完整替代路線：
-    自己用 Tavily 查新聞，把查到的內容連同數據表一起交給 Groq 寫階段一分析。
-    跟原本 Gemini 階段一的差別只在「查資料」跟「寫分析」分別由誰做，
-    輸出格式（三段式問答）維持一致，好讓後面的階段二壓縮邏輯不用跟著改。
-    """
-    search_contexts = []
-    for query in TAVILY_SEARCH_QUERIES:
-        context, error = call_tavily_search(query)
-        if context:
-            search_contexts.append(context)
-        else:
-            print(f"[tavily debug] 查詢「{query}」失敗（{error}），跳過這條，繼續用其他查詢結果")
-    if not search_contexts:
-        return None, "Tavily 搜尋全部失敗"
-    search_context = "\n\n".join(search_contexts)
-
-    table = build_data_table()
+    table, recent = build_data_table()
+    changes = build_changes_block(recent)
     prompt = f"""你是一位總經與跨資產分析師。以下是最近幾天的六項市場指標數據：
 
 {table}
 
-以下是搜尋到的相關財經新聞片段，可用來解釋「為什麼」指標會這樣變動：
+{changes}
 
-{search_context}
+{ANTI_HALLUCINATION_NOTE}
 
-{ANALYSIS_QUESTIONS}"""
+{ANALYSIS_QUESTIONS_DATA_ONLY}"""
 
     text, error, truncated = call_groq_api(None, prompt, max_tokens=4096)
     if not text:
@@ -315,7 +308,7 @@ def flag_ungrounded_investment_lines(text):
 
 
 def compress_to_arrow_chain(raw_text, raw_truncated=False):
-    """階段二：把階段一寫好的長文壓縮成因果箭頭鏈格式，Gemini/Tavily+Groq 兩條路線
+    """階段二：把階段一寫好的長文壓縮成因果箭頭鏈格式，Gemini/純數據 Groq 兩條路線
     到這裡都共用同一段邏輯。優先用 Groq（免搜尋、免占用 Gemini 額度），失敗才退回 Gemini。
     """
     compress_input = (
@@ -354,11 +347,11 @@ def call_gemini(prompt):
     raw_text, error, raw_truncated = call_gemini_api(None, prompt, use_search=True, max_tokens=4096)
     if not raw_text:
         # Gemini 的 google_search 額度通常比模型本身的請求額度小很多，最容易先在
-        # 這裡被打回票。整條線改用 Tavily 查資料 + Groq 寫分析頂上，避免直接失敗。
-        print(f"[gemini debug] 階段一失敗（{error}），改用 Tavily+Groq 頂上")
-        raw_text, fallback_error = call_stage1_via_tavily_and_groq()
+        # 這裡被打回票。整條線改用純數據 Groq 頂上，避免直接失敗。
+        print(f"[gemini debug] 階段一失敗（{error}），改用純數據 Groq 頂上")
+        raw_text, fallback_error = call_stage1_data_only_via_groq()
         if not raw_text:
-            return None, None, f"Gemini 失敗（{error}），Tavily+Groq 備援也失敗（{fallback_error}）"
+            return None, None, f"Gemini 失敗（{error}），Groq 備援也失敗（{fallback_error}）"
         raw_truncated = False
 
     compressed_text, error = compress_to_arrow_chain(raw_text, raw_truncated)
@@ -366,11 +359,11 @@ def call_gemini(prompt):
 
 
 def run_fallback_analysis():
-    """給「Tavily+Groq」按鈕用，跳過 Gemini，直接跑 Tavily 搜尋 + Groq 分析這條線。
+    """給「Groq（純數據）」按鈕用，跳過 Gemini，直接跑純數據 Groq 分析這條線。
     現在跟 Gemini 那條線是平行的兩組獨立結果（給使用者互相比對/仲裁用），不再只是
     「Gemini 失敗才用的備援」。
     """
-    raw_text, error = call_stage1_via_tavily_and_groq()
+    raw_text, error = call_stage1_data_only_via_groq()
     if not raw_text:
         return None, None, error
     compressed_text, error = compress_to_arrow_chain(raw_text)
@@ -412,10 +405,10 @@ def build_arbitration_prompt():
         gemini_raw = "（尚無分析原文，請先按左側「Gemini+Groq」跑一次）"
         missing.append("Gemini+Groq")
     if not fallback_raw:
-        fallback_raw = "（尚無分析原文，請先按右側「Tavily+Groq」跑一次）"
-        missing.append("Tavily+Groq")
+        fallback_raw = "（尚無分析原文，請先按右側「Groq（純數據）」跑一次）"
+        missing.append("Groq（純數據）")
 
-    table = build_data_table()
+    table, _recent = build_data_table()
     prompt = f"""{ARBITRATION_INSTRUCTION}
 
 【原始市場數據】
@@ -424,7 +417,7 @@ def build_arbitration_prompt():
 【分析組 A：Gemini+Groq】
 {gemini_raw}
 
-【分析組 B：Tavily+Groq】
+【分析組 B：Groq（純數據）】
 {fallback_raw}"""
     return prompt, missing
 
