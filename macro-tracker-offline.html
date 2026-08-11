@@ -790,8 +790,16 @@
     <div class="status-msg" id="cell-edit-status" style="margin-bottom:4px;"></div>
 
     <div class="table-container">
-      <div style="display:flex; justify-content:flex-end; padding:10px 10px 8px;">
+      <div style="display:flex; justify-content:flex-end; gap:10px; padding:10px 10px 8px;">
+        <button class="btn btn-secondary" id="toggle-inst-breakdown-btn">📊 三大法人明細</button>
         <button class="btn btn-secondary" id="toggle-history-btn">📖 展開歷史數據</button>
+      </div>
+      <div class="board-card" id="inst-breakdown-panel" style="display:none; margin:0 10px 14px;">
+        <div class="board-title" style="margin-bottom:8px; padding-bottom:6px;">
+          <span style="font-size:16px;">三大法人買賣金額明細</span>
+          <span class="status-msg" id="inst-breakdown-status" style="font-size:13px;"></span>
+        </div>
+        <div id="inst-breakdown-body" style="overflow-x:auto;"></div>
       </div>
       <table>
         <thead>
@@ -1616,6 +1624,56 @@ ${JSON_PROMPT_QUESTIONS}`;
         tr.style.display = historyRowsExpanded ? 'table-row' : 'none';
       });
       document.getElementById('toggle-history-btn').textContent = historyRowsExpanded ? '📕 收起歷史數據' : '📖 展開歷史數據';
+    });
+
+    // 三大法人明細：只查「今天」現況給人看，不落地存檔、不存歷史，所以每次展開都直接重新
+    // 打 API 拿最新值，不快取——這種盤中會一直變動的數字，快取只會顯示過期資料造成誤導。
+    function formatYi(v, withSign) {
+      const sign = withSign && v > 0 ? '+' : '';
+      return sign + v.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '億';
+    }
+
+    function renderInstBreakdownTable(data) {
+      const rows = data.rows.map(r => `
+        <tr>
+          <td>${r.label}</td>
+          <td class="num-cell" style="cursor:default;">${formatYi(r.buy, false)}</td>
+          <td class="num-cell" style="cursor:default;">${formatYi(r.sell, false)}</td>
+          <td class="num-cell" style="cursor:default; font-weight:800; color:${r.net >= 0 ? 'var(--up-red)' : 'var(--down-green)'};">${formatYi(r.net, true)}</td>
+        </tr>
+      `).join('');
+      return `<table style="min-width:0;">
+        <thead><tr><th>單位</th><th>買進金額</th><th>賣出金額</th><th>買賣差額</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+    }
+
+    async function loadInstBreakdown() {
+      const statusEl = document.getElementById('inst-breakdown-status');
+      const bodyEl = document.getElementById('inst-breakdown-body');
+      statusEl.textContent = '⏳ 查詢中...';
+      bodyEl.innerHTML = '';
+      try {
+        const resp = await fetch('/api/institutional-breakdown');
+        const data = await resp.json();
+        if (!data.ok) {
+          statusEl.textContent = '❌ ' + (data.error || '查詢失敗');
+          return;
+        }
+        statusEl.textContent = `資料日期 ${data.data.date}`;
+        bodyEl.innerHTML = renderInstBreakdownTable(data.data);
+      } catch (e) {
+        statusEl.textContent = '❌ 無法連線本機伺服器 API: ' + e.message;
+      }
+    }
+
+    document.getElementById('toggle-inst-breakdown-btn').addEventListener('click', () => {
+      const panel = document.getElementById('inst-breakdown-panel');
+      const btn = document.getElementById('toggle-inst-breakdown-btn');
+      const isHidden = panel.style.display === 'none';
+      panel.style.display = isHidden ? 'block' : 'none';
+      btn.textContent = isHidden ? '📕 收起明細' : '📊 三大法人明細';
+      if (isHidden) loadInstBreakdown();
     });
 
     document.getElementById('arbitration-prompt-btn').addEventListener('click', async () => {

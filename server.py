@@ -619,6 +619,41 @@ def build_arbitration_prompt():
     return prompt, missing
 
 
+def fetch_institutional_breakdown():
+    """即時打 TWSE 官方「三大法人買賣金額統計表」API，回傳當天完整明細（自營商自行買賣/避險、
+    投信、外資及陸資、合計，各自的買進/賣出/買賣差額），不落地存檔——這只是給網頁上「三大法人
+    明細」按鈕現查現看用的，跟 update_macro_data.py 存進 macro_data.json 的合計欄位是分開的兩件事，
+    避免為了一個明細表格就把主要數據檔的欄位結構搞複雜。
+    """
+    try:
+        resp = requests.get("https://www.twse.com.tw/rwd/zh/fund/BFI82U?response=json", timeout=10)
+        resp.raise_for_status()
+        payload = resp.json()
+    except Exception as e:
+        return None, f"連線 TWSE 失敗: {e}"
+
+    if payload.get("stat") != "OK":
+        return None, payload.get("stat") or "TWSE 回應異常"
+
+    rows = []
+    for label, buy, sell, net in payload.get("data", []):
+        if label == "外資自營商":
+            continue  # 已計入自營商買賣金額，官方合計本身也不計這行，跟著排除避免重複
+        try:
+            rows.append({
+                "label": label,
+                "buy": round(float(buy.replace(",", "")) / 1e8, 2),
+                "sell": round(float(sell.replace(",", "")) / 1e8, 2),
+                "net": round(float(net.replace(",", "")) / 1e8, 2),
+            })
+        except ValueError:
+            continue
+
+    raw_date = payload.get("date", "")
+    date_str = f"{raw_date[:4]}-{raw_date[4:6]}-{raw_date[6:]}" if len(raw_date) == 8 else raw_date
+    return {"date": date_str, "rows": rows}, None
+
+
 GIT_LOCK = threading.Lock()
 GIT_PULL_MAX_RETRIES = 2
 GIT_PULL_RETRY_WAIT = 1.5  # 秒
@@ -765,6 +800,16 @@ class Handler(SimpleHTTPRequestHandler):
             prompt, missing = build_arbitration_prompt()
             body = json.dumps({"ok": True, "text": prompt, "missing": missing}, ensure_ascii=False).encode("utf-8")
             self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        if parsed.path == "/api/institutional-breakdown":
+            data, error = fetch_institutional_breakdown()
+            body = json.dumps({"ok": data is not None, "data": data, "error": error}, ensure_ascii=False).encode("utf-8")
+            self.send_response(200 if data is not None else 502)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
