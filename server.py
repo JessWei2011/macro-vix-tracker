@@ -44,6 +44,10 @@ try:
     from ai_keys_local import GROQ_API_KEY
 except ImportError:
     GROQ_API_KEY = ""
+try:
+    from ai_keys_local import TAVILY_API_KEY
+except ImportError:
+    TAVILY_API_KEY = ""
 
 FIELD_LABELS = {
     "vixtwn": "VIXTWN(台股期貨波動率指數)",
@@ -278,12 +282,7 @@ def call_groq_api(system_instruction, user_text, max_tokens=1024):
 
 def call_stage1_data_only_via_groq():
     """純數據分析路線（不查新聞）：只根據我們自己資料庫裡的數據走勢，交給 Groq 推理。
-
-    原本這裡是查 Tavily 抓新聞片段當背景資料，但實測 Tavily 查到的東西常常不準，
-    導致分析出現「原油明明上漲，卻寫成下跌」這種基本方向都判斷錯的離譜結果——
-    問題不在「有沒有新聞佐證」，而是連我們自己提供的數字都會判斷錯。與其讓模型
-    邊查（不可靠的）新聞邊做因果推論、放大出錯機會，不如直接拿掉查新聞這一步，
-    只讓它老老實實根據 build_prompt() 裡已經算好的漲跌方向和數據本身做推理。
+    當 Tavily 搜尋整批失敗時的最後防線，確保分析不會直接掛掉。
     """
     table, recent = build_data_table()
     changes = build_changes_block(recent)
@@ -303,6 +302,103 @@ def call_stage1_data_only_via_groq():
     if truncated:
         text += "\n\n⚠️（內容可能因長度限制被截斷）"
     return text, None
+
+
+def call_tavily_search(query, max_results=5):
+    """查即時財經新聞片段，回傳結果給 Groq 當「查到的新聞」使用。
+    Tavily 回傳的品質不保證（可能過時、不相關、內容含糊），所以呼叫端的 prompt
+    必須明確要求模型自己判斷這些片段能不能真的解釋數據變動，不能照單全收。
+    """
+    if not TAVILY_API_KEY:
+        return None, "尚未設定 TAVILY_API_KEY（請在 ai_keys_local.py 填入）"
+    try:
+        resp = requests.post(
+            "https://api.tavily.com/search",
+            json={
+                "api_key": TAVILY_API_KEY,
+                "query": query,
+                "search_depth": "basic",
+                "max_results": max_results,
+                "include_answer": False,
+            },
+            timeout=30,
+        )
+    except requests.RequestException as e:
+        return None, f"Tavily 連線失敗: {e}"
+    if not resp.ok:
+        return None, f"Tavily API 錯誤 {resp.status_code}: {resp.text[:500]}"
+    results = resp.json().get("results", [])
+    if not results:
+        return None, "Tavily 沒有搜尋到結果"
+    formatted = "\n\n".join(
+        f"【{r.get('title', '')}】\n{r.get('content', '')[:400]}\n來源: {r.get('url', '')}"
+        for r in results
+    )
+    return formatted, None
+
+
+TAVILY_SEARCH_QUERIES = [
+    "VIX恐慌指數 布蘭特原油 美國10年公債殖利率 高收益債利差 今日財經新聞",
+    # 單獨開一個查詢專門找 Fed 降息機率／就業數據這類「利率預期」催化劑，因為
+    # 這類新聞常常是黃金、美元、公債同時變動的關鍵驅動，但不見得會被上面那組
+    # 偏指標名稱的關鍵字搜到。
+    "Fed 聯準會 降息機率 非農就業 CPI 通膨 最新消息",
+]
+
+
+TAVILY_VERIFICATION_NOTE = f"""{ANTI_HALLUCINATION_NOTE}
+
+【新聞查證規則，一樣嚴格，違反視為分析失敗】下面的新聞片段是自動搜尋抓回來的，品質不保證，
+可能過時、不相關、或內容含糊。使用前你必須自己判斷：這則新聞的內容和發生時間，是否真的能
+解釋上面「已計算好的漲跌方向」。如果新聞片段內容含糊、找不到明確對應的具體事件、或跟數據
+方向對不上，禁止硬拼湊一個看起來合理但其實對不上的解釋，必須誠實承認「查無明確對應新聞」，
+改用一般總經知識做推論（並且要清楚標示這是推論，不是查證到的事實）。絕對不准編造新聞片段
+裡沒有出現過的細節（日期、機構、數字、人名）冒充成真的查證結果。"""
+
+
+def call_stage1_via_tavily_and_groq():
+    """Tavily 查新聞 + Groq 寫分析。回傳 (text, used_search, error)。
+
+    Tavily 全部查詢失敗時，退回 call_stage1_data_only_via_groq() 純數據路線，
+    這種情況 used_search 是 False，讓呼叫端知道【原因】不能用新聞摘要格式壓縮
+    （沒有真的新聞內容可摘要）。
+    """
+    search_contexts = []
+    for query in TAVILY_SEARCH_QUERIES:
+        context, error = call_tavily_search(query)
+        if context:
+            search_contexts.append(context)
+        else:
+            print(f"[tavily debug] 查詢「{query}」失敗（{error}），跳過這條，繼續用其他查詢結果")
+
+    if not search_contexts:
+        print("[tavily debug] Tavily 搜尋全部失敗，改用純數據分析頂上")
+        text, error = call_stage1_data_only_via_groq()
+        return text, False, (error if not text else None)
+
+    search_context = "\n\n".join(search_contexts)
+    table, recent = build_data_table()
+    changes = build_changes_block(recent)
+    prompt = f"""你是一位總經與跨資產分析師。以下是最近幾天的六項市場指標數據：
+
+{table}
+
+{changes}
+
+以下是搜尋到的相關財經新聞片段，可用來解釋「為什麼」指標會這樣變動：
+
+{search_context}
+
+{TAVILY_VERIFICATION_NOTE}
+
+{ANALYSIS_QUESTIONS_WITH_SEARCH}"""
+
+    text, error, truncated = call_groq_api(None, prompt, max_tokens=4096)
+    if not text:
+        return None, False, f"Groq 撰寫階段一分析失敗: {error}"
+    if truncated:
+        text += "\n\n⚠️（內容可能因長度限制被截斷）"
+    return text, True, None
 
 
 STANCE_LINE_RE = re.compile(r"^[🟢🟡🔴⚫]\s*\S+\s+(緊抱|加碼|減碼|出場)\s*$")
@@ -380,14 +476,14 @@ def call_gemini(prompt):
 
 
 def run_fallback_analysis():
-    """給「Groq（純數據）」按鈕用，跳過 Gemini，直接跑純數據 Groq 分析這條線。
+    """給「Tavily+Groq」按鈕用，跳過 Gemini，跑 Tavily 搜尋 + Groq 分析這條線。
     現在跟 Gemini 那條線是平行的兩組獨立結果（給使用者互相比對/仲裁用），不再只是
     「Gemini 失敗才用的備援」。
     """
-    raw_text, error = call_stage1_data_only_via_groq()
+    raw_text, used_search, error = call_stage1_via_tavily_and_groq()
     if not raw_text:
         return None, None, error
-    compressed_text, error = compress_to_arrow_chain(raw_text)
+    compressed_text, error = compress_to_arrow_chain(raw_text, news_style=used_search)
     return compressed_text, raw_text, error
 
 
@@ -426,8 +522,8 @@ def build_arbitration_prompt():
         gemini_raw = "（尚無分析原文，請先按左側「Gemini+Groq」跑一次）"
         missing.append("Gemini+Groq")
     if not fallback_raw:
-        fallback_raw = "（尚無分析原文，請先按右側「Groq（純數據）」跑一次）"
-        missing.append("Groq（純數據）")
+        fallback_raw = "（尚無分析原文，請先按右側「Tavily+Groq」跑一次）"
+        missing.append("Tavily+Groq")
 
     table, _recent = build_data_table()
     prompt = f"""{ARBITRATION_INSTRUCTION}
@@ -438,7 +534,7 @@ def build_arbitration_prompt():
 【分析組 A：Gemini+Groq】
 {gemini_raw}
 
-【分析組 B：Groq（純數據）】
+【分析組 B：Tavily+Groq】
 {fallback_raw}"""
     return prompt, missing
 
