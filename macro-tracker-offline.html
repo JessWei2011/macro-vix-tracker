@@ -45,9 +45,9 @@
     }
 
     .container {
-      /* 用視窗寬度的 92% 自動縮放版面：筆電螢幕會比較窄、大桌機螢幕會等比例變寬，
+      /* 用視窗寬度的 80% 自動縮放版面：筆電螢幕會比較窄、大桌機螢幕會等比例變寬，
          不用寫死某個像素值；1900px 只是避免在超寬螢幕上表格/文字被拉到過寬、影響閱讀。 */
-      width: 92vw;
+      width: 80vw;
       max-width: 1900px;
       margin: 0 auto;
     }
@@ -553,6 +553,7 @@
       --col-us10y: #ba68c8;
       --col-spread: #81c784;
       --col-dxy: #64b5f6;
+      --col-instnet: #ffd54f;
     }
 
     th:nth-child(2), td.num-cell:nth-child(2) .cell-value { color: var(--col-vixtwn); }
@@ -561,6 +562,7 @@
     th:nth-child(5), td.num-cell:nth-child(5) .cell-value { color: var(--col-us10y); }
     th:nth-child(6), td.num-cell:nth-child(6) .cell-value { color: var(--col-spread); }
     th:nth-child(7), td.num-cell:nth-child(7) .cell-value { color: var(--col-dxy); }
+    th:nth-child(8), td.num-cell:nth-child(8) .cell-value { color: var(--col-instnet); }
 
     td.num-cell:nth-child(2) { border-left: 3px solid var(--col-vixtwn); }
     td.num-cell:nth-child(3) { border-left: 3px solid var(--col-vix); }
@@ -568,6 +570,7 @@
     td.num-cell:nth-child(5) { border-left: 3px solid var(--col-us10y); }
     td.num-cell:nth-child(6) { border-left: 3px solid var(--col-spread); }
     td.num-cell:nth-child(7) { border-left: 3px solid var(--col-dxy); }
+    td.num-cell:nth-child(8) { border-left: 3px solid var(--col-instnet); }
 
     .blank-tag {
       color: #777788;
@@ -800,6 +803,7 @@
             <th><div class="th-label">10年美債 (%)<span class="fresh-dot" id="fresh-us10y"></span></div><div class="th-spark" id="spark-us10y"></div></th>
             <th><div class="th-label">利差 Spread (%)<span class="fresh-dot" id="fresh-spread"></span></div><div class="th-spark" id="spark-spread"></div></th>
             <th><div class="th-label">美元指數 DXY<span class="fresh-dot" id="fresh-dxy"></span></div><div class="th-spark" id="spark-dxy"></div></th>
+            <th><div class="th-label">三大法人合計(億)<span class="fresh-dot" id="fresh-instnet"></span></div><div class="th-spark" id="spark-instnet"></div></th>
             <th style="width: 60px; text-align: center;">刪除</th>
           </tr>
         </thead>
@@ -1227,7 +1231,7 @@
     }
 
     function renderSparklines() {
-      const fields = ['vixtwn', 'vix', 'oil', 'us10y', 'spread', 'dxy'];
+      const fields = ['vixtwn', 'vix', 'oil', 'us10y', 'spread', 'dxy', 'instnet'];
       // 近 10~14 天：資料本身就只有交易日，沒有假日資料自然跳過，直接取最後 14 筆即可。
       const asc = [...entries].sort((a, b) => a.date.localeCompare(b.date)).slice(-14);
 
@@ -1257,7 +1261,7 @@
       renderSparklines();
 
       if (sorted.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color: var(--text-sub); padding: 40px;">目前無數據，請執行 update_macro_data.py 抓取。</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; color: var(--text-sub); padding: 40px;">目前無數據，請執行 update_macro_data.py 抓取。</td></tr>`;
         return;
       }
 
@@ -1288,6 +1292,9 @@
             </td>
             <td class="num-cell" onclick="startEditCell(this, '${item.date}', 'dxy', ${item.dxy})">
               ${renderCellContent(item, prevItem, sorted, index, 'dxy')}
+            </td>
+            <td class="num-cell" onclick="startEditCell(this, '${item.date}', 'instnet', ${item.instnet})">
+              ${renderCellContent(item, prevItem, sorted, index, 'instnet')}
             </td>
             <td style="text-align: center;"><button class="del-btn" onclick="deleteEntry('${item.date}')" title="刪除本筆">🗑️</button></td>
           </tr>
@@ -1440,7 +1447,8 @@ ${JSON_PROMPT_QUESTIONS}`;
       { key: 'oil', label: '布蘭特原油', color: 'var(--col-oil)' },
       { key: 'us10y', label: '10年美債', color: 'var(--col-us10y)' },
       { key: 'spread', label: 'Spread', color: 'var(--col-spread)' },
-      { key: 'dxy', label: '美元指數', color: 'var(--col-dxy)' }
+      { key: 'dxy', label: '美元指數', color: 'var(--col-dxy)' },
+      { key: 'instnet', label: '三大法人合計買賣超', color: 'var(--col-instnet)' }
     ];
     // 依照各欄位的公布時間表，換算「現在這個時間點理論上能拿到的最新資料日期」，
     // 而不是死板比對台灣今天的日期（美股/油價/美債本來就晚台灣一天公布）。
@@ -1460,6 +1468,9 @@ ${JSON_PROMPT_QUESTIONS}`;
       switch (fieldKey) {
         case 'vixtwn':
           return h >= 14 ? today : shiftDateStr(today, -1);
+        case 'instnet':
+          // 三大法人買賣金額統計表比 VIXTWN 慢，通常下午 15 點後才會有當天完整數字。
+          return h >= 15 ? today : shiftDateStr(today, -1);
         case 'vix':
         case 'us10y':
         case 'dxy':
