@@ -506,6 +506,12 @@
     .inst-net-up { color: var(--up-red); }
     .inst-net-down { color: var(--down-green); }
 
+    /* 資料不是當天的（例如盤中還沒更新、假日沿用前一天），整塊調暗，一眼就知道不是最新 */
+    .inst-table-wrap.inst-stale {
+      opacity: 0.45;
+      filter: grayscale(50%);
+    }
+
     table {
       width: 100%;
       border-collapse: collapse;
@@ -1666,7 +1672,7 @@ ${JSON_PROMPT_QUESTIONS}`;
       return sign + v.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '億';
     }
 
-    function renderInstBreakdownTable(data) {
+    function renderInstBreakdownTable(data, isStale) {
       const rows = data.rows.map(r => {
         const isTotal = r.label === '合計';
         const netCls = r.net >= 0 ? 'inst-net-up' : 'inst-net-down';
@@ -1679,7 +1685,7 @@ ${JSON_PROMPT_QUESTIONS}`;
           <td class="${netCls}">${netIcon} ${formatYi(r.net, true)}</td>
         </tr>`;
       }).join('');
-      return `<div class="inst-table-wrap"><table class="inst-table">
+      return `<div class="inst-table-wrap${isStale ? ' inst-stale' : ''}"><table class="inst-table">
         <thead><tr><th>單位</th><th>買進金額</th><th>賣出金額</th><th>買賣差額</th></tr></thead>
         <tbody>${rows}</tbody>
       </table></div>`;
@@ -1698,8 +1704,11 @@ ${JSON_PROMPT_QUESTIONS}`;
           return;
         }
         const fetchedAt = new Date().toLocaleTimeString('zh-TW', { hour12: false });
-        statusEl.textContent = `資料日期 ${data.data.date} ｜ 查詢時間 ${fetchedAt}`;
-        bodyEl.innerHTML = renderInstBreakdownTable(data.data);
+        const todayStr = new Date().toISOString().split('T')[0];
+        const isStale = data.data.date !== todayStr;
+        statusEl.textContent = (isStale ? '⚪ 非當日最新 － ' : '🟢 ') +
+          `資料日期 ${data.data.date} ｜ 查詢時間 ${fetchedAt}`;
+        bodyEl.innerHTML = renderInstBreakdownTable(data.data, isStale);
       } catch (e) {
         statusEl.textContent = '❌ 無法連線本機伺服器 API: ' + e.message;
       }
