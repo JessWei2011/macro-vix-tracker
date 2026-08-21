@@ -1,5 +1,5 @@
 """
-Fetch VIXTWN / VIX / Brent oil / US10Y / HY OAS spread and merge into
+Fetch VIXTWN / VIX / Brent oil / US10Y / US30Y / HY OAS spread / DXY and merge into
 macro_data.json. Run on either computer, any time of day. Pulls latest data
 first, only overwrites fields it actually got a fresh value for (never
 blanks a field with None), then commits and pushes.
@@ -97,6 +97,11 @@ def fetch_us10y():
     return (round(val, 3), asof) if val is not None else (None, None)
 
 
+def fetch_us30y():
+    val, asof = fetch_yfinance_last_close("^TYX")
+    return (round(val, 3), asof) if val is not None else (None, None)
+
+
 def fetch_dxy():
     val, asof = fetch_yfinance_last_close("DX-Y.NYB")
     return (round(val, 2), asof) if val is not None else (None, None)
@@ -157,7 +162,7 @@ def get_expected_asof(key, now):
     h = now.hour
     if key == "vixtwn":
         return (today if h >= 14 else today - timedelta(days=1)).isoformat()
-    if key in ("vix", "us10y", "dxy"):
+    if key in ("vix", "us10y", "us30y", "dxy"):
         return (today - timedelta(days=1) if h >= 4 else today - timedelta(days=2)).isoformat()
     if key == "oil":
         return (today - timedelta(days=1) if h >= 5 else today - timedelta(days=2)).isoformat()
@@ -178,6 +183,7 @@ def main():
         "vix": fetch_vix(),
         "oil": fetch_oil(),
         "us10y": fetch_us10y(),
+        "us30y": fetch_us30y(),
         "spread": fetch_spread(),
         "dxy": fetch_dxy(),
     }
@@ -186,7 +192,7 @@ def main():
     if entry is None:
         entry = {
             "date": today, "vixtwn": None, "vix": None, "oil": None,
-            "us10y": None, "spread": None, "dxy": None,
+            "us10y": None, "us30y": None, "spread": None, "dxy": None,
         }
         entries.append(entry)
 

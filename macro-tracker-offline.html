@@ -591,12 +591,13 @@
       font-weight: 700;
     }
 
-    /* 五項數據分色，方便一眼辨識欄位 */
+    /* 七項數據分色，方便一眼辨識欄位 */
     :root {
       --col-vixtwn: #ff6b6b;
       --col-vix: #ffb74d;
       --col-oil: #4dd0e1;
       --col-us10y: #ba68c8;
+      --col-us30y: #ab47bc;
       --col-spread: #81c784;
       --col-dxy: #64b5f6;
     }
@@ -605,15 +606,17 @@
     th:nth-child(3), td.num-cell:nth-child(3) .cell-value { color: var(--col-vix); }
     th:nth-child(4), td.num-cell:nth-child(4) .cell-value { color: var(--col-oil); }
     th:nth-child(5), td.num-cell:nth-child(5) .cell-value { color: var(--col-us10y); }
-    th:nth-child(6), td.num-cell:nth-child(6) .cell-value { color: var(--col-spread); }
-    th:nth-child(7), td.num-cell:nth-child(7) .cell-value { color: var(--col-dxy); }
+    th:nth-child(6), td.num-cell:nth-child(6) .cell-value { color: var(--col-us30y); }
+    th:nth-child(7), td.num-cell:nth-child(7) .cell-value { color: var(--col-spread); }
+    th:nth-child(8), td.num-cell:nth-child(8) .cell-value { color: var(--col-dxy); }
 
     td.num-cell:nth-child(2) { border-left: 3px solid var(--col-vixtwn); }
     td.num-cell:nth-child(3) { border-left: 3px solid var(--col-vix); }
     td.num-cell:nth-child(4) { border-left: 3px solid var(--col-oil); }
     td.num-cell:nth-child(5) { border-left: 3px solid var(--col-us10y); }
-    td.num-cell:nth-child(6) { border-left: 3px solid var(--col-spread); }
-    td.num-cell:nth-child(7) { border-left: 3px solid var(--col-dxy); }
+    td.num-cell:nth-child(6) { border-left: 3px solid var(--col-us30y); }
+    td.num-cell:nth-child(7) { border-left: 3px solid var(--col-spread); }
+    td.num-cell:nth-child(8) { border-left: 3px solid var(--col-dxy); }
 
     .blank-tag {
       color: #777788;
@@ -856,6 +859,7 @@
             <th><div class="th-label">VIX (美)<span class="fresh-dot" id="fresh-vix"></span></div><div class="th-spark" id="spark-vix"></div></th>
             <th><div class="th-label">布蘭特原油 ($)<span class="fresh-dot" id="fresh-oil"></span></div><div class="th-spark" id="spark-oil"></div></th>
             <th><div class="th-label">10年美債 (%)<span class="fresh-dot" id="fresh-us10y"></span></div><div class="th-spark" id="spark-us10y"></div></th>
+            <th><div class="th-label">30年美債 (%)<span class="fresh-dot" id="fresh-us30y"></span></div><div class="th-spark" id="spark-us30y"></div></th>
             <th><div class="th-label">利差 Spread (%)<span class="fresh-dot" id="fresh-spread"></span></div><div class="th-spark" id="spark-spread"></div></th>
             <th><div class="th-label">美元指數 DXY<span class="fresh-dot" id="fresh-dxy"></span></div><div class="th-spark" id="spark-dxy"></div></th>
             <th style="width: 60px; text-align: center;">刪除</th>
@@ -1027,14 +1031,14 @@
         }
       } else {
         entries = [
-          { date: '2026-07-27', vixtwn: 37.25, vix: 18.67, oil: 88.36, us10y: 4.64, spread: 2.81 },
-          { date: '2026-07-28', vixtwn: 40.38, vix: 18.21, oil: 84.09, us10y: 4.60, spread: 2.84 },
-          { date: '2026-07-29', vixtwn: 42.14, vix: 20.66, oil: 90.74, us10y: 4.62, spread: 2.87 },
-          { date: '2026-07-30', vixtwn: 44.31, vix: 17.09, oil: 89.03, us10y: 4.66, spread: 2.84 },
-          { date: '2026-07-31', vixtwn: 40.75, vix: 15.99, oil: 90.12, us10y: 4.75, spread: null },
-          { date: '2026-08-03', vixtwn: 39.46, vix: 16.00, oil: 83.77, us10y: 4.70, spread: null },
-          { date: '2026-08-04', vixtwn: 38.92, vix: 15.86, oil: 85.13, us10y: 4.69, spread: null },
-          { date: '2026-08-05', vixtwn: 35.62, vix: 16.50, oil: 78.97, us10y: 6.42, spread: null }
+          { date: '2026-07-27', vixtwn: 37.25, vix: 18.67, oil: 88.36, us10y: 4.64, us30y: 5.125, spread: 2.81 },
+          { date: '2026-07-28', vixtwn: 40.38, vix: 18.21, oil: 84.09, us10y: 4.60, us30y: 5.096, spread: 2.84 },
+          { date: '2026-07-29', vixtwn: 42.14, vix: 20.66, oil: 90.74, us10y: 4.62, us30y: 5.143, spread: 2.87 },
+          { date: '2026-07-30', vixtwn: 44.31, vix: 17.09, oil: 89.03, us10y: 4.66, us30y: 5.208, spread: 2.84 },
+          { date: '2026-07-31', vixtwn: 40.75, vix: 15.99, oil: 90.12, us10y: 4.75, us30y: 5.275, spread: null },
+          { date: '2026-08-03', vixtwn: 39.46, vix: 16.00, oil: 83.77, us10y: 4.70, us30y: 5.231, spread: null },
+          { date: '2026-08-04', vixtwn: 38.92, vix: 15.86, oil: 85.13, us10y: 4.69, us30y: 5.190, spread: null },
+          { date: '2026-08-05', vixtwn: 35.62, vix: 16.50, oil: 78.97, us10y: 6.42, us30y: 5.174, spread: null }
         ];
         saveDataLocalOnly();
       }
@@ -1285,7 +1289,7 @@
     }
 
     function renderSparklines() {
-      const fields = ['vixtwn', 'vix', 'oil', 'us10y', 'spread', 'dxy'];
+      const fields = ['vixtwn', 'vix', 'oil', 'us10y', 'us30y', 'spread', 'dxy'];
       // 近 10~14 天：資料本身就只有交易日，沒有假日資料自然跳過，直接取最後 14 筆即可。
       const asc = [...entries].sort((a, b) => a.date.localeCompare(b.date)).slice(-14);
 
@@ -1315,7 +1319,7 @@
       renderSparklines();
 
       if (sorted.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color: var(--text-sub); padding: 40px;">目前無數據，請執行 update_macro_data.py 抓取。</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; color: var(--text-sub); padding: 40px;">目前無數據，請執行 update_macro_data.py 抓取。</td></tr>`;
         return;
       }
 
@@ -1340,6 +1344,9 @@
             </td>
             <td class="num-cell" onclick="startEditCell(this, '${item.date}', 'us10y', ${item.us10y})">
               ${renderCellContent(item, prevItem, sorted, index, 'us10y')}
+            </td>
+            <td class="num-cell" onclick="startEditCell(this, '${item.date}', 'us30y', ${item.us30y})">
+              ${renderCellContent(item, prevItem, sorted, index, 'us30y')}
             </td>
             <td class="num-cell" onclick="startEditCell(this, '${item.date}', 'spread', ${item.spread})">
               ${renderCellContent(item, prevItem, sorted, index, 'spread')}
@@ -1442,7 +1449,7 @@
 - QQQM：美股 ETF（Invesco NASDAQ 100 ETF），追蹤那斯達克100指數，美股大型科技股為主。
 - 0050：台股 ETF「元大台灣50」，追蹤台灣50指數，台股大盤龍頭股（例如台積電等），不是美股。
 - IAU：美股 ETF（iShares Gold Trust），追蹤黃金現貨價格，不是任何股票指數。
-- 00948B：台灣掛牌 ETF，全名「中國信託15年期以上已開發市場投資級優化收益ESG美元公司債券ETF基金」（簡稱中信優息投資級債），追蹤 ICE 15年期以上已開發市場投資級美元公司債券指數，是「投資等級（Investment Grade）」長天期公司債，天期長、對利率敏感，主要受美債殖利率（us10y 欄位）走勢影響：殖利率上升，債券價格通常下跌；殖利率下降則通常上漲。
+- 00948B：台灣掛牌 ETF，全名「中國信託15年期以上已開發市場投資級優化收益ESG美元公司債券ETF基金」（簡稱中信優息投資級債），追蹤 ICE 15年期以上已開發市場投資級美元公司債券指數，是「投資等級（Investment Grade）」長天期公司債，天期長、對利率敏感，主要受美債殖利率（us10y / us30y 欄位）走勢影響：殖利率上升，債券價格通常下跌；殖利率下降則通常上漲。
 - 00953B：台灣掛牌 ETF，全名「群益優選收益非投資等級債券ETF證券投資信託基金」（簡稱群益優選非投等債），追蹤 ICE 1-5年BB-B級非投資等級（高收益債／垃圾債）美元債券指數，是「非投資等級（Non-Investment Grade／高收益債）」短天期公司債，不是美國公債、也不是投資等級債。天期短，走勢主要受信用利差（spread 欄位，即美國高收益債利差 HY OAS）影響，比利率本身更敏感：利差擴大代表市場對違約風險擔憂升高，通常價格下跌；利差收斂則通常上漲，不要套用 00948B 那種「跟殖利率同步」的邏輯。
 - 00948B 與 00953B 都是債券 ETF，不是股票，禁止套用股票邏輯（例如科技股情緒、台股資金流向）分析；兩者一個是投資等級、一個是非投資等級高收益債，信用風險與利率敏感度完全不同，禁止當成同一種債券混為一談。
 - 如果你的知識庫對這 5 個代號「原本」的認知跟上面不同，一律以上面的定義為準，不要照自己記憶裡的版本分析。`;
@@ -1451,7 +1458,7 @@
 1.【原因】今天變動最明顯的 1-2 項指標，用你查到的最新新聞/事件解釋「為什麼」會這樣變動（例如 OPEC+ 決策、地緣政治、Fed 談話、經濟數據公布等具體原因，不要只是複述數字）。
 2.【傳導】這個變動可能如何牽動其他資產／指數（例如黃金、美元指數、科技股、公債），方向是看漲還是看跌，並說明傳導邏輯。務必遵守上面「嚴禁混淆 VIX 與 VIXTWN」的規則：談台股/0050 只能用 VIXTWN，談美股/QQQM 只能用 VIX。
 3.【投資策略建議】依據這幾項數據的走勢，針對以下 5 檔標的分別給出具體策略建議：QQQM、0050（台股大盤ETF）、IAU（黃金）、00948B（投資等級長天期公司債ETF）、00953B（非投資等級/高收益債ETF）。
-   每一檔請明確給出「緊抱／加碼／減碼／出場」其中一種立場，並說明為什麼（要連回前面①②的因果邏輯，且 0050 的理由只能引用 VIXTWN、QQQM 的理由只能引用 VIX、00948B 的理由只能引用美債殖利率(us10y)走勢、00953B 的理由只能引用高收益債利差(spread)走勢，不可交叉引用或套用錯誤的標的定義）。
+   每一檔請明確給出「緊抱／加碼／減碼／出場」其中一種立場，並說明為什麼（要連回前面①②的因果邏輯，且 0050 的理由只能引用 VIXTWN、QQQM 的理由只能引用 VIX、00948B 的理由只能引用美債殖利率(us10y/us30y)走勢、00953B 的理由只能引用高收益債利差(spread)走勢，不可交叉引用或套用錯誤的標的定義）。
 
 請用繁體中文回答，段落分明。`;
 
@@ -1497,6 +1504,7 @@ ${JSON_PROMPT_QUESTIONS}`;
       { key: 'vix', label: 'VIX', color: 'var(--col-vix)' },
       { key: 'oil', label: '布蘭特原油', color: 'var(--col-oil)' },
       { key: 'us10y', label: '10年美債', color: 'var(--col-us10y)' },
+      { key: 'us30y', label: '30年美債', color: 'var(--col-us30y)' },
       { key: 'spread', label: 'Spread', color: 'var(--col-spread)' },
       { key: 'dxy', label: '美元指數', color: 'var(--col-dxy)' }
     ];
@@ -1520,6 +1528,7 @@ ${JSON_PROMPT_QUESTIONS}`;
           return h >= 14 ? today : shiftDateStr(today, -1);
         case 'vix':
         case 'us10y':
+        case 'us30y':
         case 'dxy':
           return h >= 4 ? shiftDateStr(today, -1) : shiftDateStr(today, -2);
         case 'oil':
