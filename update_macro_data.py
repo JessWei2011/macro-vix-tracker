@@ -136,39 +136,69 @@ def fetch_vixtwn():
     try:
         import requests
         resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
-        text = resp.content.decode("big5", errors="ignore")
-        lines = [
-            line for line in text.splitlines()
-            if line.strip() and not line.startswith("-") and "交易日期" not in line
-        ]
+        lines = []
+        if resp.status_code == 200:
+            text = resp.content.decode("big5", errors="ignore")
+            lines = [
+                line for line in text.splitlines()
+                if line.strip() and not line.startswith("-") and "交易日期" not in line
+            ]
+        # 若月初新月份文字檔尚未產生，嘗試讀取上一個月文字檔備用
+        if not lines:
+            prev_month = (today.replace(day=1) - timedelta(days=1)).strftime("%Y%m")
+            prev_url = f"https://www.taifex.com.tw/file/taifex/Dailydownload/vix/log2data/{prev_month}new.txt"
+            resp_prev = requests.get(prev_url, timeout=10)
+            if resp_prev.status_code == 200:
+                text_prev = resp_prev.content.decode("big5", errors="ignore")
+                lines = [
+                    line for line in text_prev.splitlines()
+                    if line.strip() and not line.startswith("-") and "交易日期" not in line
+                ]
         if not lines:
             return None, None
         row_date, _time, value, _pre_close_avg = lines[-1].split()
-        if row_date != today.strftime("%Y%m%d"):
-            return None, None  # 期交所還沒發布今天的收盤資料
-        return float(value), today.isoformat()
+        asof = f"{row_date[:4]}-{row_date[4:6]}-{row_date[6:]}" if len(row_date) == 8 else row_date
+        return float(value), asof
     except Exception as e:
         print(f"[警告] 抓取 VIXTWN 失敗: {e}")
         return None, None
 
 
+def get_latest_trading_day(d):
+    """若 d 為週六 (5) 退回週五 (d-1)；若為週日 (6) 退回週五 (d-2)；否則回傳 d。"""
+    if d.weekday() == 5:
+        return d - timedelta(days=1)
+    if d.weekday() == 6:
+        return d - timedelta(days=2)
+    return d
+
+
+def get_prev_trading_day(d):
+    """取得 d 之前的上一個交易日（自動跳過週末）。"""
+    prev = d - timedelta(days=1)
+    while prev.weekday() >= 5:
+        prev -= timedelta(days=1)
+    return prev
+
+
 def get_expected_asof(key, now):
     """跟網頁 getExpectedAsof() 邏輯一致：
-    VIXTWN 是台股當天自己的收盤，跟台灣日曆同一天。
-    VIX/美債/原油/spread 都是美股夜盤資料，來源自己標註的日期永遠是「前一個交易日」，
-    所以過了公布時間後最新能拿到的也只是 D-1，不是 D。"""
+    考慮週末（六、日無台美股收盤），計算當前時間點預期應拿到的最新交易日日期。"""
     today = now.date()
     h = now.hour
+
+    if today.weekday() >= 5:
+        return get_latest_trading_day(today).isoformat()
+
     if key == "vixtwn":
-        return (today if h >= 14 else today - timedelta(days=1)).isoformat()
-    if key in ("vix", "us10y", "us30y", "dxy"):
-        return (today - timedelta(days=1) if h >= 4 else today - timedelta(days=2)).isoformat()
-    if key == "oil":
-        return (today - timedelta(days=1) if h >= 5 else today - timedelta(days=2)).isoformat()
-    if key == "spread":
-        return (today - timedelta(days=1) if h >= 22 else today - timedelta(days=2)).isoformat()
-    return today.isoformat()
+        return (today if h >= 14 else get_prev_trading_day(today)).isoformat()
+
+    cutoff_hours = {"oil": 5, "spread": 22}
+    cutoff = cutoff_hours.get(key, 4)
+    if h >= cutoff:
+        return get_prev_trading_day(today).isoformat()
+    else:
+        return get_prev_trading_day(get_prev_trading_day(today)).isoformat()
 
 
 def main():
