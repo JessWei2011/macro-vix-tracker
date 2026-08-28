@@ -214,6 +214,62 @@
       color: var(--accent);
     }
 
+    .toast-container {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 9999;
+      width: min(430px, calc(100vw - 40px));
+      pointer-events: none;
+    }
+
+    .update-toast {
+      display: none;
+      position: relative;
+      padding: 16px 44px 16px 18px;
+      border: 1px solid var(--card-border);
+      border-left: 6px solid var(--accent);
+      border-radius: 10px;
+      background: rgba(24, 25, 32, 0.97);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+      pointer-events: auto;
+      animation: toastIn 0.25s ease-out;
+    }
+
+    .update-toast.show { display: block; }
+    .update-toast.success { border-left-color: var(--down-green); }
+    .update-toast.partial { border-left-color: var(--alert-gold); }
+    .update-toast.failed { border-left-color: var(--up-red); }
+    .update-toast.updating { border-left-color: var(--accent); }
+
+    .update-toast-title {
+      font-size: 18px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+
+    .update-toast-message {
+      color: var(--text-sub);
+      font-size: 15px;
+      overflow-wrap: anywhere;
+    }
+
+    .update-toast-close {
+      position: absolute;
+      top: 8px;
+      right: 10px;
+      border: 0;
+      background: transparent;
+      color: var(--text-sub);
+      cursor: pointer;
+      font-size: 22px;
+    }
+
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateY(-12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
     .result-tab-btn {
       font-size: 14px;
       font-weight: 700;
@@ -466,52 +522,6 @@
       margin-bottom: 14px;
     }
 
-    /* 三大法人明細小表：獨立一套樣式，跟主表格區隔開，強調「合計」列、買賣超正負用色 */
-    .inst-table-wrap {
-      border: 1px solid var(--card-border);
-      border-radius: 10px;
-      overflow: hidden;
-    }
-    .inst-table {
-      width: 100%;
-      border-collapse: collapse;
-      text-align: left;
-      min-width: 520px;
-    }
-    .inst-table th {
-      background-color: #20222c;
-      color: var(--text-sub);
-      font-size: 14px;
-      font-weight: 700;
-      padding: 10px 14px;
-      border-bottom: 2px solid var(--card-border);
-    }
-    .inst-table th:not(:first-child), .inst-table td:not(:first-child) {
-      text-align: right;
-      font-family: "Courier New", Courier, monospace;
-    }
-    .inst-table td {
-      padding: 10px 14px;
-      font-size: 16px;
-      font-weight: 600;
-      border-bottom: 1px solid var(--card-border);
-    }
-    .inst-table tbody tr:nth-child(odd):not(.inst-total-row) { background-color: #17181f; }
-    .inst-table tbody tr:hover { background-color: #21232e; }
-    .inst-table tbody tr.inst-total-row {
-      background-color: #23261a;
-      font-weight: 800;
-    }
-    .inst-table tbody tr.inst-total-row td { border-bottom: none; border-top: 2px solid var(--accent); }
-    .inst-net-up { color: var(--up-red); }
-    .inst-net-down { color: var(--down-green); }
-
-    /* 資料不是當天的（例如盤中還沒更新、假日沿用前一天），整塊調暗，一眼就知道不是最新 */
-    .inst-table-wrap.inst-stale {
-      opacity: 0.45;
-      filter: grayscale(50%);
-    }
-
     table {
       width: 100%;
       border-collapse: collapse;
@@ -717,6 +727,14 @@
   </style>
 </head>
 <body>
+  <div class="toast-container" aria-live="polite" aria-atomic="true">
+    <div class="update-toast" id="update-toast" role="status">
+      <button class="update-toast-close" id="update-toast-close" type="button" aria-label="關閉通知">×</button>
+      <div class="update-toast-title" id="update-toast-title"></div>
+      <div class="update-toast-message" id="update-toast-message"></div>
+    </div>
+  </div>
+
   <div class="container">
     <header>
       <h1>📊 每日總經與波動率追蹤 DB <span>(無感自動存檔版)</span></h1>
@@ -832,18 +850,6 @@
       </div>
     </div>
 
-    <!-- 【區塊 2.6】：三大法人買賣金額明細（獨立常駐顯示，不用按鈕收合；即時查詢，不落歷史） -->
-    <div class="entry-card">
-      <div class="card-title">📊 三大法人買賣金額明細</div>
-      <div class="board-card" id="inst-breakdown-panel">
-        <div class="board-title" style="margin-bottom:8px; padding-bottom:6px;">
-          <span style="font-size:16px;">今日買賣超（自營商/投信/外資）</span>
-          <span class="status-msg" id="inst-breakdown-status" style="font-size:13px;"></span>
-        </div>
-        <div id="inst-breakdown-body" style="overflow-x:auto;"></div>
-      </div>
-    </div>
-
     <!-- 【區塊 3】：數值區 / 表格顯示區 -->
     <div class="status-msg" id="cell-edit-status" style="margin-bottom:4px;"></div>
 
@@ -936,12 +942,41 @@
     const NOTIFY_CONFIG_KEY = 'macro_vix_notify_cfg_v1';
 
     let entries = [];
+    let dataBlockMessage = '等待總經資料更新狀態…';
+    let handledFinalStatusKey = null;
+    let lastStatusSignature = null;
+    let statusCheckBusy = false;
+    let statusApiFailed = false;
+    let toastTimer = null;
     let notifyCfg = {
       n1_vix: 21.0,
       n2_us10y: 4.65,
       n3_us10y: 4.85,
       n4_vixtwn: 32.5
     };
+
+    const FIELD_NAMES = {
+      vixtwn: 'VIXTWN', vix: 'VIX', oil: '布蘭特原油', us10y: '美債10Y',
+      us30y: '美債30Y', spread: '高收益債利差', dxy: 'DXY'
+    };
+
+    function hideUpdateToast() {
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = null;
+      document.getElementById('update-toast').className = 'update-toast';
+    }
+
+    function showUpdateToast(type, title, message, autoHideMs = 0) {
+      if (toastTimer) clearTimeout(toastTimer);
+      const toast = document.getElementById('update-toast');
+      document.getElementById('update-toast-title').textContent = title;
+      document.getElementById('update-toast-message').textContent = message;
+      toast.className = `update-toast show ${type}`;
+      toast.setAttribute('role', type === 'failed' ? 'alert' : 'status');
+      toastTimer = autoHideMs > 0 ? setTimeout(hideUpdateToast, autoHideMs) : null;
+    }
+
+    document.getElementById('update-toast-close').addEventListener('click', hideUpdateToast);
 
     function applyNotifyCfgToInputs() {
       document.getElementById('cfg-n1-vix').value = notifyCfg.n1_vix;
@@ -1007,42 +1042,26 @@
       try {
         const response = await fetch('./macro_data.json?t=' + Date.now());
         console.log('[DEBUG] fetch macro_data.json, ok=', response.ok, 'status=', response.status);
-        if (response.ok) {
-          const jsonFileData = await response.json();
-          console.log('[DEBUG] fetch 成功，最後一筆資料 =', jsonFileData[jsonFileData.length - 1]);
-          if (Array.isArray(jsonFileData) && jsonFileData.length > 0) {
-            entries = jsonFileData;
-            saveDataLocalOnly();
-            render();
-            return;
-          }
+        if (!response.ok) {
+          throw new Error(`macro_data.json HTTP ${response.status}`);
         }
-      } catch (e) {
-        console.error('[DEBUG] fetch macro_data.json 失敗（很可能是 file:// 被瀏覽器擋掉 CORS），改用 localStorage 快取:', e);
-      }
-
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        console.warn('[DEBUG] 目前使用的是 localStorage 快取，不是即時讀檔，資料可能是舊的！');
-        try {
-          entries = JSON.parse(raw);
-        } catch (e) {
-          entries = [];
+        const jsonFileData = await response.json();
+        console.log('[DEBUG] fetch 成功，最後一筆資料 =', jsonFileData[jsonFileData.length - 1]);
+        if (!Array.isArray(jsonFileData) || jsonFileData.length === 0) {
+          throw new Error('macro_data.json 沒有可用資料');
         }
-      } else {
-        entries = [
-          { date: '2026-07-27', vixtwn: 37.25, vix: 18.67, oil: 88.36, us10y: 4.64, us30y: 5.125, spread: 2.81 },
-          { date: '2026-07-28', vixtwn: 40.38, vix: 18.21, oil: 84.09, us10y: 4.60, us30y: 5.096, spread: 2.84 },
-          { date: '2026-07-29', vixtwn: 42.14, vix: 20.66, oil: 90.74, us10y: 4.62, us30y: 5.143, spread: 2.87 },
-          { date: '2026-07-30', vixtwn: 44.31, vix: 17.09, oil: 89.03, us10y: 4.66, us30y: 5.208, spread: 2.84 },
-          { date: '2026-07-31', vixtwn: 40.75, vix: 15.99, oil: 90.12, us10y: 4.75, us30y: 5.275, spread: null },
-          { date: '2026-08-03', vixtwn: 39.46, vix: 16.00, oil: 83.77, us10y: 4.70, us30y: 5.231, spread: null },
-          { date: '2026-08-04', vixtwn: 38.92, vix: 15.86, oil: 85.13, us10y: 4.69, us30y: 5.190, spread: null },
-          { date: '2026-08-05', vixtwn: 35.62, vix: 16.50, oil: 78.97, us10y: 6.42, us30y: 5.174, spread: null }
-        ];
+        entries = jsonFileData;
+        dataBlockMessage = '';
         saveDataLocalOnly();
+        render();
+        return true;
+      } catch (e) {
+        console.error('[DEBUG] fetch macro_data.json 失敗；為避免顯示舊資料，不使用 localStorage 快取:', e);
+        entries = [];
+        dataBlockMessage = '資料檔載入失敗；為避免誤判，已停止顯示舊快取。';
+        render();
+        return false;
       }
-      render();
     }
 
     function saveDataLocalOnly() {
@@ -1319,7 +1338,9 @@
       renderSparklines();
 
       if (sorted.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; color: var(--text-sub); padding: 40px;">目前無數據，請執行 update_macro_data.py 抓取。</td></tr>`;
+        const message = dataBlockMessage || '目前沒有可顯示的資料。';
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; color: var(--text-sub); padding: 40px;"></td></tr>`;
+        tbody.querySelector('td').textContent = message;
         return;
       }
 
@@ -1691,55 +1712,6 @@ ${JSON_PROMPT_QUESTIONS}`;
       document.getElementById('toggle-history-btn').textContent = historyRowsExpanded ? '📕 收起歷史數據' : '📖 展開歷史數據';
     });
 
-    // 三大法人明細：只查「今天」現況給人看，不落地存檔、不存歷史，所以每次展開都直接重新
-    // 打 API 拿最新值，不快取——這種盤中會一直變動的數字，快取只會顯示過期資料造成誤導。
-    function formatYi(v, withSign) {
-      const sign = withSign && v > 0 ? '+' : '';
-      return sign + v.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '億';
-    }
-
-    function renderInstBreakdownTable(data, isStale) {
-      const rows = data.rows.map(r => {
-        const isTotal = r.label === '合計';
-        const netCls = r.net >= 0 ? 'inst-net-up' : 'inst-net-down';
-        const netIcon = r.net >= 0 ? '🔴' : '🟢'; // 台股慣例：紅=買超(漲)、綠=賣超(跌)
-        return `
-        <tr${isTotal ? ' class="inst-total-row"' : ''}>
-          <td>${r.label}</td>
-          <td>${formatYi(r.buy, false)}</td>
-          <td>${formatYi(r.sell, false)}</td>
-          <td class="${netCls}">${netIcon} ${formatYi(r.net, true)}</td>
-        </tr>`;
-      }).join('');
-      return `<div class="inst-table-wrap${isStale ? ' inst-stale' : ''}"><table class="inst-table">
-        <thead><tr><th>單位</th><th>買進金額</th><th>賣出金額</th><th>買賣差額</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table></div>`;
-    }
-
-    async function loadInstBreakdown() {
-      const statusEl = document.getElementById('inst-breakdown-status');
-      const bodyEl = document.getElementById('inst-breakdown-body');
-      statusEl.textContent = '⏳ 查詢中...';
-      bodyEl.innerHTML = '';
-      try {
-        const resp = await fetch('/api/institutional-breakdown');
-        const data = await resp.json();
-        if (!data.ok) {
-          statusEl.textContent = '❌ ' + (data.error || '查詢失敗');
-          return;
-        }
-        const fetchedAt = new Date().toLocaleTimeString('zh-TW', { hour12: false });
-        const todayStr = new Date().toISOString().split('T')[0];
-        const isStale = data.data.date !== todayStr;
-        statusEl.textContent = (isStale ? '⚪ 非當日最新 － ' : '🟢 ') +
-          `資料日期 ${data.data.date} ｜ 查詢時間 ${fetchedAt}`;
-        bodyEl.innerHTML = renderInstBreakdownTable(data.data, isStale);
-      } catch (e) {
-        statusEl.textContent = '❌ 無法連線本機伺服器 API: ' + e.message;
-      }
-    }
-
     document.getElementById('arbitration-prompt-btn').addEventListener('click', async () => {
       const statusEl = document.getElementById('arbitration-status');
       openResultPanel();
@@ -1785,10 +1757,97 @@ ${JSON_PROMPT_QUESTIONS}`;
       } catch (e) {}
     }
 
-    loadNotifyCfg();
-    loadData();
+    function formatFieldNames(fields) {
+      return (fields || []).map(key => FIELD_NAMES[key] || key).join('、');
+    }
+
+    async function fetchUpdateStatus() {
+      const resp = await fetch('/api/update-status?t=' + Date.now(), { cache: 'no-store' });
+      if (!resp.ok) throw new Error(`更新狀態 HTTP ${resp.status}`);
+      return resp.json();
+    }
+
+    async function applyFinalUpdateStatus(status, finalKey) {
+      handledFinalStatusKey = finalKey;
+
+      if (status.state === 'success' || status.state === 'partial') {
+        // 門檻設定必須先完成，loadData() 的唯一一次 render 才會使用正確門檻。
+        await loadNotifyCfg();
+        const loaded = await loadData();
+        if (!loaded) {
+          showUpdateToast('failed', '❌ 資料載入失敗', dataBlockMessage);
+          return;
+        }
+
+        if (status.state === 'success') {
+          showUpdateToast('success', '✅ 總經資料更新成功', status.message || '七項資料已更新。', 8000);
+          return;
+        }
+
+        const failedNames = formatFieldNames(status.failedFields);
+        const syncDetail = status.syncMessage && !String(status.syncMessage).includes('已同步')
+          ? ` ${status.syncMessage}`
+          : '';
+        const detail = failedNames ? ` 未更新：${failedNames}。` : '';
+        showUpdateToast(
+          'partial',
+          '⚠️ 總經資料部分成功',
+          (status.message || '部分資料已更新。') + detail + syncDetail,
+          14000
+        );
+        return;
+      }
+
+      entries = [];
+      dataBlockMessage = status.message || '本次更新失敗；為避免誤判，未載入既有資料。';
+      render();
+      const detail = status.error ? ` ${status.error}` : '';
+      const title = status.state === 'idle' ? '⚪ 尚未更新總經資料' : '❌ 總經資料更新失敗';
+      showUpdateToast(status.state === 'idle' ? 'partial' : 'failed', title, dataBlockMessage + detail);
+    }
+
+    async function checkUpdateStatus() {
+      if (statusCheckBusy) return;
+      statusCheckBusy = true;
+      try {
+        const status = await fetchUpdateStatus();
+        statusApiFailed = false;
+        const runKey = status.runId || 'no-run';
+        const signature = `${runKey}:${status.state}:${status.phase || ''}`;
+
+        if (status.state === 'updating') {
+          if (signature !== lastStatusSignature) {
+            entries = [];
+            dataBlockMessage = status.message || '總經資料更新中，完成前不顯示舊資料。';
+            render();
+            showUpdateToast('updating', '⏳ 正在更新總經資料', dataBlockMessage);
+          }
+          lastStatusSignature = signature;
+          return;
+        }
+
+        const finalKey = `${runKey}:${status.state}:${status.finishedAt || status.updatedAt || ''}`;
+        if (finalKey !== handledFinalStatusKey) {
+          await applyFinalUpdateStatus(status, finalKey);
+        }
+        lastStatusSignature = signature;
+      } catch (e) {
+        if (!statusApiFailed) {
+          statusApiFailed = true;
+          entries = [];
+          dataBlockMessage = '無法確認更新結果；為避免誤判，未載入既有資料。';
+          render();
+          showUpdateToast('failed', '❌ 無法取得更新狀態', `${dataBlockMessage} ${e.message}`);
+        }
+      } finally {
+        statusCheckBusy = false;
+      }
+    }
+
+    render();
+    checkUpdateStatus();
+    setInterval(checkUpdateStatus, 2000);
     loadPastAnalysis();
-    loadInstBreakdown();
   </script>
 </body>
 </html>

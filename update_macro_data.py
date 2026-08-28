@@ -8,6 +8,7 @@ import json
 import subprocess
 import sys
 import time
+import uuid
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -17,6 +18,20 @@ if sys.stdout.encoding != "utf-8":
 
 DIR = Path(__file__).resolve().parent
 DATA_FILE = DIR / "macro_data.json"
+UPDATE_STATUS_FILE = DIR / "macro_update_status.json"
+FIELDS = ("vixtwn", "vix", "oil", "us10y", "us30y", "spread", "dxy")
+
+# 此檔會由系統匣的 pythonw 背景程序啟動。Git 另開子程序時也要明確
+# 隱藏其主控台，否則 Windows 可能短暫把命令視窗切到前景。
+GIT_PROCESS_KWARGS = {}
+if sys.platform == "win32":
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startupinfo.wShowWindow = subprocess.SW_HIDE
+    GIT_PROCESS_KWARGS = {
+        "creationflags": subprocess.CREATE_NO_WINDOW,
+        "startupinfo": startupinfo,
+    }
 
 sys.path.insert(0, str(DIR))
 try:
@@ -26,12 +41,39 @@ except ImportError:
 
 
 def run_git(*args):
-    result = subprocess.run(["git", *args], cwd=DIR, capture_output=True, text=True)
+    result = subprocess.run(
+        ["git", *args], cwd=DIR, capture_output=True, text=True, **GIT_PROCESS_KWARGS
+    )
     return result.returncode, result.stdout.strip(), result.stderr.strip()
 
 
 GIT_PULL_MAX_RETRIES = 2
 GIT_PULL_RETRY_WAIT = 1.5  # 秒
+
+
+def now_iso():
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def read_update_status():
+    try:
+        data = json.loads(UPDATE_STATUS_FILE.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def write_update_status(state, run_id, **details):
+    """原子更新本機狀態檔，讓網頁輪詢時不會讀到半份 JSON。"""
+    payload = {
+        "state": state,
+        "runId": run_id,
+        "updatedAt": now_iso(),
+        **details,
+    }
+    temp_file = UPDATE_STATUS_FILE.with_suffix(UPDATE_STATUS_FILE.suffix + ".tmp")
+    temp_file.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    temp_file.replace(UPDATE_STATUS_FILE)
 
 
 def git_pull():
@@ -43,10 +85,11 @@ def git_pull():
         code, out, err = run_git("pull", "--rebase")
         if code == 0:
             print(f"[git pull] {out or 'up to date'}")
-            return
+            return None
         if attempt == GIT_PULL_MAX_RETRIES:
-            print(f"[警告] git pull 失敗，請手動處理後再重跑:\n{err}")
-            sys.exit(1)
+            message = f"git pull 失敗，請手動處理後再重跑: {err}"
+            print(f"[警告] {message}")
+            return message
         print(f"[git pull] 失敗，{GIT_PULL_RETRY_WAIT} 秒後重試 (第 {attempt + 1}/{GIT_PULL_MAX_RETRIES} 次): {err}")
         time.sleep(GIT_PULL_RETRY_WAIT)
 
@@ -57,15 +100,19 @@ def git_commit_and_push(today):
     if code != 0:
         if "nothing to commit" in (out + err):
             print("[git] 沒有新的變動，略過 commit/push")
-            return
-        print(f"[警告] git commit 失敗:\n{err}")
-        return
+            return True, "資料沒有變動，不需同步"
+        message = f"git commit 失敗: {err}"
+        print(f"[警告] {message}")
+        return False, message
     print(f"[git commit] {out}")
     code, out, err = run_git("push")
     if code != 0:
-        print(f"[警告] git push 失敗，請手動執行 push.bat:\n{err}")
+        message = f"git push 失敗，請手動執行 push.bat: {err}"
+        print(f"[警告] {message}")
+        return False, message
     else:
         print("[git push] 完成")
+        return True, "已同步到 GitHub"
 
 
 def fetch_yfinance_last_close(ticker):
@@ -202,11 +249,35 @@ def get_expected_asof(key, now):
 
 
 def main():
-    git_pull()
+    previous_status = read_update_status()
+    run_id = (
+        previous_status.get("runId")
+        if previous_status.get("state") == "updating" and previous_status.get("runId")
+        else uuid.uuid4().hex
+    )
+    started_at = previous_status.get("startedAt") or now_iso()
+    write_update_status(
+        "updating", run_id, startedAt=started_at, phase="pulling",
+        message="正在同步遠端資料…", updatedFields=[], failedFields=[],
+    )
+
+    pull_error = git_pull()
+    if pull_error:
+        write_update_status(
+            "failed", run_id, startedAt=started_at, finishedAt=now_iso(), phase="failed",
+            message="更新失敗，未載入舊資料。", error=pull_error,
+            updatedFields=[], failedFields=list(FIELDS),
+        )
+        return 1
 
     entries = json.loads(DATA_FILE.read_text(encoding="utf-8")) if DATA_FILE.exists() else []
     today = date.today().isoformat()
-    now_iso = datetime.now().astimezone().isoformat(timespec="seconds")
+    fetched_at = now_iso()
+
+    write_update_status(
+        "updating", run_id, startedAt=started_at, phase="fetching",
+        message="正在抓取七項總經資料…", updatedFields=[], failedFields=[],
+    )
 
     fetched = {
         "vixtwn": fetch_vixtwn(),
@@ -218,6 +289,17 @@ def main():
         "dxy": fetch_dxy(),
     }
 
+    updated_fields = [key for key, (val, _asof) in fetched.items() if val is not None]
+    failed_fields = [key for key in FIELDS if key not in updated_fields]
+    if not updated_fields:
+        write_update_status(
+            "failed", run_id, startedAt=started_at, finishedAt=now_iso(), phase="failed",
+            message="七項資料皆抓取失敗，未載入舊資料。",
+            error="所有資料來源都沒有回傳可用數值。",
+            updatedFields=[], failedFields=failed_fields,
+        )
+        return 1
+
     entry = next((e for e in entries if e["date"] == today), None)
     if entry is None:
         entry = {
@@ -227,17 +309,17 @@ def main():
         entries.append(entry)
 
     meta = entry.get("_meta", {})
-    updated_fields = []
     for key, (val, asof) in fetched.items():
         if val is not None:
             entry[key] = val
-            meta[key] = {"asof": asof, "fetchedAt": now_iso}
-            updated_fields.append(key)
+            meta[key] = {"asof": asof, "fetchedAt": fetched_at}
     if meta:
         entry["_meta"] = meta
 
     entries.sort(key=lambda e: e["date"])
-    DATA_FILE.write_text(json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8")
+    temp_data_file = DATA_FILE.with_suffix(DATA_FILE.suffix + ".tmp")
+    temp_data_file.write_text(json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8")
+    temp_data_file.replace(DATA_FILE)
 
     now = datetime.now()
     print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] {today} 更新欄位: {updated_fields or '(無新資料)'}")
@@ -247,8 +329,48 @@ def main():
         status = "🟢 目前最新" if is_fresh else f"⚪ 尚未更新（預期應有 {expected}）"
         print(f"  - {key}: 資料日期 {info['asof']} {status}")
 
-    git_commit_and_push(today)
+    write_update_status(
+        "updating", run_id, startedAt=started_at, phase="syncing",
+        message="資料已寫入，正在同步 GitHub…",
+        updatedFields=updated_fields, failedFields=failed_fields,
+    )
+    sync_ok, sync_message = git_commit_and_push(today)
+
+    is_complete = len(updated_fields) == len(FIELDS) and sync_ok
+    state = "success" if is_complete else "partial"
+    if is_complete:
+        message = "七項總經資料更新完成，並已完成同步。"
+    elif failed_fields and not sync_ok:
+        message = f"已更新 {len(updated_fields)}/{len(FIELDS)} 項，但部分來源與 GitHub 同步失敗。"
+    elif failed_fields:
+        message = f"已更新 {len(updated_fields)}/{len(FIELDS)} 項；其餘來源暫時無可用資料。"
+    else:
+        message = "七項資料已寫入本機，但 GitHub 同步失敗。"
+
+    write_update_status(
+        state, run_id, startedAt=started_at, finishedAt=now_iso(), phase="complete",
+        message=message, syncMessage=sync_message,
+        updatedFields=updated_fields, failedFields=failed_fields,
+    )
+    return 0 if is_complete else 2
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        sys.exit(main())
+    except Exception as error:
+        status = read_update_status()
+        run_id = status.get("runId") or uuid.uuid4().hex
+        started_at = status.get("startedAt") or now_iso()
+        message = f"更新程式發生未預期錯誤: {error}"
+        print(f"[錯誤] {message}", file=sys.stderr)
+        try:
+            write_update_status(
+                "failed", run_id, startedAt=started_at, finishedAt=now_iso(), phase="failed",
+                message="更新失敗，未載入舊資料。", error=message,
+                updatedFields=status.get("updatedFields", []),
+                failedFields=status.get("failedFields", list(FIELDS)),
+            )
+        except OSError:
+            pass
+        sys.exit(1)

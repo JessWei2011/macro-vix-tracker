@@ -2,3 +2,6 @@ config_local.py
 ai_keys_local.py
 __pycache__/
 *.pyc
+macro_update_status.json
+macro_update_status.json.tmp
+macro_update.log
