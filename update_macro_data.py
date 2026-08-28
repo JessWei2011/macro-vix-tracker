@@ -1,13 +1,6 @@
-"""
-Fetch VIXTWN / VIX / Brent oil / US10Y / US30Y / HY OAS spread / DXY and merge into
-macro_data.json. Run on either computer, any time of day. Pulls latest data
-first, only overwrites fields it actually got a fresh value for (never
-blanks a field with None), then commits and pushes.
-"""
+"""Fetch seven macro indicators and merge fresh values into local macro_data.json."""
 import json
-import subprocess
 import sys
-import time
 import uuid
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -21,34 +14,11 @@ DATA_FILE = DIR / "macro_data.json"
 UPDATE_STATUS_FILE = DIR / "macro_update_status.json"
 FIELDS = ("vixtwn", "vix", "oil", "us10y", "us30y", "spread", "dxy")
 
-# 此檔會由系統匣的 pythonw 背景程序啟動。Git 另開子程序時也要明確
-# 隱藏其主控台，否則 Windows 可能短暫把命令視窗切到前景。
-GIT_PROCESS_KWARGS = {}
-if sys.platform == "win32":
-    startupinfo = subprocess.STARTUPINFO()
-    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-    startupinfo.wShowWindow = subprocess.SW_HIDE
-    GIT_PROCESS_KWARGS = {
-        "creationflags": subprocess.CREATE_NO_WINDOW,
-        "startupinfo": startupinfo,
-    }
-
 sys.path.insert(0, str(DIR))
 try:
     from config_local import FRED_API_KEY
 except ImportError:
     FRED_API_KEY = None
-
-
-def run_git(*args):
-    result = subprocess.run(
-        ["git", *args], cwd=DIR, capture_output=True, text=True, **GIT_PROCESS_KWARGS
-    )
-    return result.returncode, result.stdout.strip(), result.stderr.strip()
-
-
-GIT_PULL_MAX_RETRIES = 2
-GIT_PULL_RETRY_WAIT = 1.5  # 秒
 
 
 def now_iso():
@@ -74,45 +44,6 @@ def write_update_status(state, run_id, **details):
     temp_file = UPDATE_STATUS_FILE.with_suffix(UPDATE_STATUS_FILE.suffix + ".tmp")
     temp_file.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
     temp_file.replace(UPDATE_STATUS_FILE)
-
-
-def git_pull():
-    """pull --rebase 偶爾會撞上「同一時間 server.py 也在存分析結果」的暫時性衝突
-    （像是 FETCH_HEAD 被讀到一半），常見症狀是 "Cannot rebase onto multiple branches"
-    這種跟遠端真實內容衝突無關的錯誤，等一下重試通常就會自己好。
-    """
-    for attempt in range(GIT_PULL_MAX_RETRIES + 1):
-        code, out, err = run_git("pull", "--rebase")
-        if code == 0:
-            print(f"[git pull] {out or 'up to date'}")
-            return None
-        if attempt == GIT_PULL_MAX_RETRIES:
-            message = f"git pull 失敗，請手動處理後再重跑: {err}"
-            print(f"[警告] {message}")
-            return message
-        print(f"[git pull] 失敗，{GIT_PULL_RETRY_WAIT} 秒後重試 (第 {attempt + 1}/{GIT_PULL_MAX_RETRIES} 次): {err}")
-        time.sleep(GIT_PULL_RETRY_WAIT)
-
-
-def git_commit_and_push(today):
-    code, out, err = run_git("add", "macro_data.json")
-    code, out, err = run_git("commit", "-m", f"Auto update macro data for {today}")
-    if code != 0:
-        if "nothing to commit" in (out + err):
-            print("[git] 沒有新的變動，略過 commit/push")
-            return True, "資料沒有變動，不需同步"
-        message = f"git commit 失敗: {err}"
-        print(f"[警告] {message}")
-        return False, message
-    print(f"[git commit] {out}")
-    code, out, err = run_git("push")
-    if code != 0:
-        message = f"git push 失敗，請手動執行 push.bat: {err}"
-        print(f"[警告] {message}")
-        return False, message
-    else:
-        print("[git push] 完成")
-        return True, "已同步到 GitHub"
 
 
 def fetch_yfinance_last_close(ticker):
@@ -256,20 +187,6 @@ def main():
         else uuid.uuid4().hex
     )
     started_at = previous_status.get("startedAt") or now_iso()
-    write_update_status(
-        "updating", run_id, startedAt=started_at, phase="pulling",
-        message="正在同步遠端資料…", updatedFields=[], failedFields=[],
-    )
-
-    pull_error = git_pull()
-    if pull_error:
-        write_update_status(
-            "failed", run_id, startedAt=started_at, finishedAt=now_iso(), phase="failed",
-            message="更新失敗，未載入舊資料。", error=pull_error,
-            updatedFields=[], failedFields=list(FIELDS),
-        )
-        return 1
-
     entries = json.loads(DATA_FILE.read_text(encoding="utf-8")) if DATA_FILE.exists() else []
     today = date.today().isoformat()
     fetched_at = now_iso()
@@ -329,28 +246,16 @@ def main():
         status = "🟢 目前最新" if is_fresh else f"⚪ 尚未更新（預期應有 {expected}）"
         print(f"  - {key}: 資料日期 {info['asof']} {status}")
 
-    write_update_status(
-        "updating", run_id, startedAt=started_at, phase="syncing",
-        message="資料已寫入，正在同步 GitHub…",
-        updatedFields=updated_fields, failedFields=failed_fields,
-    )
-    sync_ok, sync_message = git_commit_and_push(today)
-
-    is_complete = len(updated_fields) == len(FIELDS) and sync_ok
+    is_complete = len(updated_fields) == len(FIELDS)
     state = "success" if is_complete else "partial"
     if is_complete:
-        message = "七項總經資料更新完成，並已完成同步。"
-    elif failed_fields and not sync_ok:
-        message = f"已更新 {len(updated_fields)}/{len(FIELDS)} 項，但部分來源與 GitHub 同步失敗。"
-    elif failed_fields:
-        message = f"已更新 {len(updated_fields)}/{len(FIELDS)} 項；其餘來源暫時無可用資料。"
+        message = "七項總經資料更新完成，已寫入本機資料檔。"
     else:
-        message = "七項資料已寫入本機，但 GitHub 同步失敗。"
+        message = f"已更新 {len(updated_fields)}/{len(FIELDS)} 項；其餘來源暫時無可用資料。"
 
     write_update_status(
         state, run_id, startedAt=started_at, finishedAt=now_iso(), phase="complete",
-        message=message, syncMessage=sync_message,
-        updatedFields=updated_fields, failedFields=failed_fields,
+        message=message, updatedFields=updated_fields, failedFields=failed_fields,
     )
     return 0 if is_complete else 2
 

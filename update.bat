@@ -9,7 +9,7 @@ if errorlevel 1 (
 )
 
 rem Opening the html directly via file:// blocks fetch() with CORS, so serve it locally instead.
-rem server.py also exposes /api/analyze/gemini for the AI macro analysis button.
+rem server.py provides the local dashboard and local file persistence APIs.
 rem Always kill whatever is already on 8934 first, so an old/stale server.py process
 rem never lingers and silently serves outdated routes after this script gets updated.
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr :8934 ^| findstr LISTENING') do taskkill /F /PID %%a >nul 2>&1
