@@ -570,11 +570,12 @@
       font-weight: 700;
     }
 
-    /* 七項數據分色，方便一眼辨識欄位 */
+    /* 八項數據分色，方便一眼辨識欄位 */
     :root {
       --col-vixtwn: #ff6b6b;
       --col-vix: #ffb74d;
       --col-oil: #4dd0e1;
+      --col-gold: #ffd54f;
       --col-us10y: #ba68c8;
       --col-us30y: #ab47bc;
       --col-spread: #81c784;
@@ -584,18 +585,20 @@
     th:nth-child(2), td.num-cell:nth-child(2) .cell-value { color: var(--col-vixtwn); }
     th:nth-child(3), td.num-cell:nth-child(3) .cell-value { color: var(--col-vix); }
     th:nth-child(4), td.num-cell:nth-child(4) .cell-value { color: var(--col-oil); }
-    th:nth-child(5), td.num-cell:nth-child(5) .cell-value { color: var(--col-us10y); }
-    th:nth-child(6), td.num-cell:nth-child(6) .cell-value { color: var(--col-us30y); }
-    th:nth-child(7), td.num-cell:nth-child(7) .cell-value { color: var(--col-spread); }
-    th:nth-child(8), td.num-cell:nth-child(8) .cell-value { color: var(--col-dxy); }
+    th:nth-child(5), td.num-cell:nth-child(5) .cell-value { color: var(--col-gold); }
+    th:nth-child(6), td.num-cell:nth-child(6) .cell-value { color: var(--col-us10y); }
+    th:nth-child(7), td.num-cell:nth-child(7) .cell-value { color: var(--col-us30y); }
+    th:nth-child(8), td.num-cell:nth-child(8) .cell-value { color: var(--col-spread); }
+    th:nth-child(9), td.num-cell:nth-child(9) .cell-value { color: var(--col-dxy); }
 
     td.num-cell:nth-child(2) { border-left: 3px solid var(--col-vixtwn); }
     td.num-cell:nth-child(3) { border-left: 3px solid var(--col-vix); }
     td.num-cell:nth-child(4) { border-left: 3px solid var(--col-oil); }
-    td.num-cell:nth-child(5) { border-left: 3px solid var(--col-us10y); }
-    td.num-cell:nth-child(6) { border-left: 3px solid var(--col-us30y); }
-    td.num-cell:nth-child(7) { border-left: 3px solid var(--col-spread); }
-    td.num-cell:nth-child(8) { border-left: 3px solid var(--col-dxy); }
+    td.num-cell:nth-child(5) { border-left: 3px solid var(--col-gold); }
+    td.num-cell:nth-child(6) { border-left: 3px solid var(--col-us10y); }
+    td.num-cell:nth-child(7) { border-left: 3px solid var(--col-us30y); }
+    td.num-cell:nth-child(8) { border-left: 3px solid var(--col-spread); }
+    td.num-cell:nth-child(9) { border-left: 3px solid var(--col-dxy); }
 
     .blank-tag {
       color: #777788;
@@ -803,6 +806,7 @@
             <th><div class="th-label">VIXTWN (台)<span class="fresh-dot" id="fresh-vixtwn"></span></div><div class="th-spark" id="spark-vixtwn"></div></th>
             <th><div class="th-label">VIX (美)<span class="fresh-dot" id="fresh-vix"></span></div><div class="th-spark" id="spark-vix"></div></th>
             <th><div class="th-label">布蘭特原油 ($)<span class="fresh-dot" id="fresh-oil"></span></div><div class="th-spark" id="spark-oil"></div></th>
+            <th><div class="th-label">現貨黃金 XAU/USD ($/oz)<span class="fresh-dot" id="fresh-gold"></span></div><div class="th-spark" id="spark-gold"></div></th>
             <th><div class="th-label">10年美債 (%)<span class="fresh-dot" id="fresh-us10y"></span></div><div class="th-spark" id="spark-us10y"></div></th>
             <th><div class="th-label">30年美債 (%)<span class="fresh-dot" id="fresh-us30y"></span></div><div class="th-spark" id="spark-us30y"></div></th>
             <th><div class="th-label">利差 Spread (%)<span class="fresh-dot" id="fresh-spread"></span></div><div class="th-spark" id="spark-spread"></div></th>
@@ -896,7 +900,7 @@
 
     const FIELD_NAMES = {
       vixtwn: 'VIXTWN', vix: 'VIX', oil: '布蘭特原油', us10y: '美債10Y',
-      us30y: '美債30Y', spread: '高收益債利差', dxy: 'DXY'
+      gold: '現貨黃金 XAU/USD', us30y: '美債30Y', spread: '高收益債利差', dxy: 'DXY'
     };
 
     function hideUpdateToast() {
@@ -1245,7 +1249,7 @@
     }
 
     function renderSparklines() {
-      const fields = ['vixtwn', 'vix', 'oil', 'us10y', 'us30y', 'spread', 'dxy'];
+      const fields = ['vixtwn', 'vix', 'oil', 'gold', 'us10y', 'us30y', 'spread', 'dxy'];
       // 近 10~14 天：資料本身就只有交易日，沒有假日資料自然跳過，直接取最後 14 筆即可。
       const asc = [...entries].sort((a, b) => a.date.localeCompare(b.date)).slice(-14);
 
@@ -1276,7 +1280,7 @@
 
       if (sorted.length === 0) {
         const message = dataBlockMessage || '目前沒有可顯示的資料。';
-        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; color: var(--text-sub); padding: 40px;"></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; color: var(--text-sub); padding: 40px;"></td></tr>`;
         tbody.querySelector('td').textContent = message;
         return;
       }
@@ -1299,6 +1303,9 @@
             </td>
             <td class="num-cell" onclick="startEditCell(this, '${item.date}', 'oil', ${item.oil})">
               ${renderCellContent(item, prevItem, sorted, index, 'oil')}
+            </td>
+            <td class="num-cell" onclick="startEditCell(this, '${item.date}', 'gold', ${item.gold})">
+              ${renderCellContent(item, prevItem, sorted, index, 'gold')}
             </td>
             <td class="num-cell" onclick="startEditCell(this, '${item.date}', 'us10y', ${item.us10y})">
               ${renderCellContent(item, prevItem, sorted, index, 'us10y')}
@@ -1458,6 +1465,7 @@ ${JSON_PROMPT_QUESTIONS}`;
       { key: 'vixtwn', label: 'VIXTWN', color: 'var(--col-vixtwn)' },
       { key: 'vix', label: 'VIX', color: 'var(--col-vix)' },
       { key: 'oil', label: '布蘭特原油', color: 'var(--col-oil)' },
+      { key: 'gold', label: '現貨黃金 XAU/USD', color: 'var(--col-gold)' },
       { key: 'us10y', label: '10年美債', color: 'var(--col-us10y)' },
       { key: 'us30y', label: '30年美債', color: 'var(--col-us30y)' },
       { key: 'spread', label: 'Spread', color: 'var(--col-spread)' },
@@ -1502,7 +1510,7 @@ ${JSON_PROMPT_QUESTIONS}`;
         return h >= 14 ? today : getPrevTradingDayStr(now);
       }
 
-      const cutoffs = { oil: 5, spread: 22 };
+      const cutoffs = { oil: 5, gold: 5, spread: 22 };
       const cutoff = cutoffs[fieldKey] || 4;
 
       if (h >= cutoff) {

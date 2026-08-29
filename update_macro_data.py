@@ -1,4 +1,4 @@
-"""Fetch seven macro indicators and merge fresh values into local macro_data.json."""
+"""Fetch macro indicators and merge fresh values into local macro_data.json."""
 import json
 import sys
 import uuid
@@ -12,7 +12,7 @@ if sys.stdout.encoding != "utf-8":
 DIR = Path(__file__).resolve().parent
 DATA_FILE = DIR / "macro_data.json"
 UPDATE_STATUS_FILE = DIR / "macro_update_status.json"
-FIELDS = ("vixtwn", "vix", "oil", "us10y", "us30y", "spread", "dxy")
+FIELDS = ("vixtwn", "vix", "oil", "gold", "us10y", "us30y", "spread", "dxy")
 
 sys.path.insert(0, str(DIR))
 try:
@@ -68,6 +68,35 @@ def fetch_vix():
 def fetch_oil():
     val, asof = fetch_yfinance_last_close("BZ=F")
     return (round(val, 2), asof) if val is not None else (None, None)
+
+
+def fetch_gold_history():
+    """取得 XAUS 的 XAU/USD 每日收盤歷史，最長可回傳五年資料。"""
+    try:
+        import requests
+        response = requests.get("https://xaus.com/api/v1/history", timeout=15)
+        response.raise_for_status()
+        payload = response.json()
+        points = payload.get("points", [])
+        history = {
+            point["d"]: round(float(point["c"]), 2)
+            for point in points
+            if isinstance(point, dict) and point.get("d") and point.get("c") is not None
+        }
+        if not history:
+            raise ValueError("API 沒有回傳 XAU/USD 歷史點位")
+        return history
+    except Exception as e:
+        print(f"[警告] 抓取 XAU/USD 現貨黃金歷史失敗: {e}")
+        return {}
+
+
+def fetch_gold(history):
+    """從每日歷史序列取得最近一個完成交易日的現貨黃金收盤價。"""
+    if not history:
+        return None, None
+    asof = max(history)
+    return history[asof], asof
 
 
 def fetch_us10y():
@@ -171,7 +200,7 @@ def get_expected_asof(key, now):
     if key == "vixtwn":
         return (today if h >= 14 else get_prev_trading_day(today)).isoformat()
 
-    cutoff_hours = {"oil": 5, "spread": 22}
+    cutoff_hours = {"oil": 5, "gold": 5, "spread": 22}
     cutoff = cutoff_hours.get(key, 4)
     if h >= cutoff:
         return get_prev_trading_day(today).isoformat()
@@ -193,13 +222,15 @@ def main():
 
     write_update_status(
         "updating", run_id, startedAt=started_at, phase="fetching",
-        message="正在抓取七項總經資料…", updatedFields=[], failedFields=[],
+        message="正在抓取八項總經資料（含現貨黃金）…", updatedFields=[], failedFields=[],
     )
 
+    gold_history = fetch_gold_history()
     fetched = {
         "vixtwn": fetch_vixtwn(),
         "vix": fetch_vix(),
         "oil": fetch_oil(),
+        "gold": fetch_gold(gold_history),
         "us10y": fetch_us10y(),
         "us30y": fetch_us30y(),
         "spread": fetch_spread(),
@@ -211,7 +242,7 @@ def main():
     if not updated_fields:
         write_update_status(
             "failed", run_id, startedAt=started_at, finishedAt=now_iso(), phase="failed",
-            message="七項資料皆抓取失敗，未載入舊資料。",
+            message="八項資料皆抓取失敗，未載入舊資料。",
             error="所有資料來源都沒有回傳可用數值。",
             updatedFields=[], failedFields=failed_fields,
         )
@@ -221,9 +252,15 @@ def main():
     if entry is None:
         entry = {
             "date": today, "vixtwn": None, "vix": None, "oil": None,
-            "us10y": None, "us30y": None, "spread": None, "dxy": None,
+            "gold": None, "us10y": None, "us30y": None, "spread": None, "dxy": None,
         }
         entries.append(entry)
+
+    # 以同一個正式日線來源回填已有資料日期，首次加入就能畫出完整走線圖。
+    for historical_entry in entries:
+        historical_date = historical_entry.get("date")
+        if historical_date in gold_history:
+            historical_entry["gold"] = gold_history[historical_date]
 
     meta = entry.get("_meta", {})
     for key, (val, asof) in fetched.items():
@@ -232,6 +269,21 @@ def main():
             meta[key] = {"asof": asof, "fetchedAt": fetched_at}
     if meta:
         entry["_meta"] = meta
+
+    # 供 JSON 使用者直接閱讀的現貨黃金報告；前端表格只使用 gold 數列與 _meta 的最新日期。
+    gold_value, gold_asof = fetched["gold"]
+    if gold_value is not None and gold_asof:
+        reports = entry.get("_reports", {})
+        reports["gold_spot"] = {
+            "name": "國際現貨黃金 XAU/USD",
+            "symbol": "XAUUSD=X",
+            "unit": "USD per troy ounce",
+            "latest": gold_value,
+            "latestDate": gold_asof,
+            "source": "xaus.com/api/v1/history",
+            "updatedAt": fetched_at,
+        }
+        entry["_reports"] = reports
 
     entries.sort(key=lambda e: e["date"])
     temp_data_file = DATA_FILE.with_suffix(DATA_FILE.suffix + ".tmp")
@@ -249,7 +301,7 @@ def main():
     is_complete = len(updated_fields) == len(FIELDS)
     state = "success" if is_complete else "partial"
     if is_complete:
-        message = "七項總經資料更新完成，已寫入本機資料檔。"
+        message = "八項總經資料（含現貨黃金）更新完成，已寫入本機資料檔。"
     else:
         message = f"已更新 {len(updated_fields)}/{len(FIELDS)} 項；其餘來源暫時無可用資料。"
 
