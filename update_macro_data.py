@@ -99,6 +99,49 @@ def fetch_gold(history):
     return history[asof], asof
 
 
+def fetch_gold_goldprice_dev():
+    """XAUS 無法使用時，改取 goldprice.dev 的 XAU/USD 現貨報價。"""
+    try:
+        import requests
+        response = requests.get(
+            "https://api.goldprice.dev/v1/prices",
+            params={"symbol": "XAU-USD-SPOT"},
+            timeout=15,
+        )
+        response.raise_for_status()
+        symbols = response.json().get("symbols", [])
+        quote = next(
+            (
+                item for item in symbols
+                if item.get("quote_currency") == "USD"
+                and item.get("unit") == "troy_ounce"
+                and item.get("contract_type") == "spot"
+            ),
+            None,
+        )
+        if not quote or quote.get("is_stale") or quote.get("price") is None:
+            raise ValueError("API 沒有回傳可用的即時 XAU/USD 現貨報價")
+        observed_at = datetime.fromisoformat(quote["computed_at"].replace("Z", "+00:00"))
+        return round(float(quote["price"]), 2), observed_at.astimezone().date().isoformat()
+    except Exception as e:
+        print(f"[警告] 抓取 goldprice.dev XAU/USD 現貨備援失敗: {e}")
+        return None, None
+
+
+def fetch_gold_with_fallback():
+    """優先取 XAUS 歷史資料；失敗時改取另一個公開現貨來源。"""
+    history = fetch_gold_history()
+    value, asof = fetch_gold(history)
+    if value is not None:
+        return history, (value, asof), "xaus.com/api/v1/history"
+
+    print("[資訊] XAUS 未回傳可用黃金資料，改用 goldprice.dev XAU/USD 現貨備援。")
+    value, asof = fetch_gold_goldprice_dev()
+    if value is not None:
+        return history, (value, asof), "goldprice.dev/v1/prices (XAU-USD-SPOT)"
+    return history, (None, None), None
+
+
 def fetch_us10y():
     val, asof = fetch_yfinance_last_close("^TNX")
     return (round(val, 3), asof) if val is not None else (None, None)
@@ -225,12 +268,12 @@ def main():
         message="正在抓取八項總經資料（含現貨黃金）…", updatedFields=[], failedFields=[],
     )
 
-    gold_history = fetch_gold_history()
+    gold_history, gold_data, gold_source = fetch_gold_with_fallback()
     fetched = {
         "vixtwn": fetch_vixtwn(),
         "vix": fetch_vix(),
         "oil": fetch_oil(),
-        "gold": fetch_gold(gold_history),
+        "gold": gold_data,
         "us10y": fetch_us10y(),
         "us30y": fetch_us30y(),
         "spread": fetch_spread(),
@@ -280,7 +323,7 @@ def main():
             "unit": "USD per troy ounce",
             "latest": gold_value,
             "latestDate": gold_asof,
-            "source": "xaus.com/api/v1/history",
+            "source": gold_source,
             "updatedAt": fetched_at,
         }
         entry["_reports"] = reports
