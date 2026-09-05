@@ -29,6 +29,58 @@
       --c-dark-bomb: #a0a0b0;
     }
 
+    [data-theme="light"] {
+      --bg: #ffffff;
+      --card-bg: #ffffff;
+      --card-border: #e2e8f0;
+      --input-bg: #ffffff;
+      --input-border: #cbd5e1;
+      --input-focus: #2563eb;
+      --text-main: #000000;   /* 純黑主文字 */
+      --text-sub: #334155;    /* Slate-700 清晰深灰 */
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --flat-gray: #475569;
+    }
+
+    [data-theme="light"] body {
+      background-color: #ffffff;
+      color: #000000;
+    }
+
+    [data-theme="light"] header {
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    [data-theme="light"] .board-card,
+    [data-theme="light"] .entry-card,
+    [data-theme="light"] .table-card,
+    [data-theme="light"] .notify-settings-card {
+      background-color: #ffffff;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+    [data-theme="light"] .light-stage {
+      background-color: #f8fafc;
+      border: 1px solid #e2e8f0;
+    }
+
+    [data-theme="light"] .light-desc {
+      color: #334155;
+      font-weight: 600;
+    }
+
+    [data-theme="light"] tr:hover td {
+      background-color: #f8fafc;
+    }
+
+    [data-theme="light"] th {
+      background-color: #f8fafc;
+      color: #000000;
+      border-bottom: 2px solid #cbd5e1;
+    }
+
     * {
       box-sizing: border-box;
       margin: 0;
@@ -711,6 +763,10 @@
     <header>
       <h1>📊 每日總經與波動率追蹤 DB <span>(無感自動存檔版)</span></h1>
       <div style="display: flex; gap: 12px; align-items: center;">
+        <button type="button" class="btn" id="macroThemeToggleBtn" title="切換白天（淺色）/ 夜晚（深色）模式" style="padding: 6px 12px; font-size: 14px; font-weight: 700; border-radius: 8px; display: inline-flex; align-items: center; gap: 5px; cursor: pointer; border: 1px solid var(--card-border); background: var(--card-bg); color: var(--text-main);">
+          <span id="macroThemeToggleIcon">🌙</span>
+          <span id="macroThemeToggleText">夜晚模式</span>
+        </button>
         <div class="status-msg" id="db-count">筆數: 0</div>
         <button class="btn btn-danger" id="shutdown-server-btn" title="關閉本機伺服器進程">🔴 關閉伺服器</button>
       </div>
@@ -1654,6 +1710,37 @@ ${JSON_PROMPT_QUESTIONS}`;
         statusCheckBusy = false;
       }
     }
+
+    // ── ☀️/🌙 白天夜晚主題切換 ──
+    const THEME_STORAGE_KEY = 'stock-app-theme-preference';
+    function applyMacroTheme(theme, save = true) {
+      const isLight = theme === 'light';
+      const targetTheme = isLight ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', targetTheme);
+      document.body.setAttribute('data-theme', targetTheme);
+      if (save) localStorage.setItem(THEME_STORAGE_KEY, targetTheme);
+      const icon = document.getElementById('macroThemeToggleIcon');
+      const text = document.getElementById('macroThemeToggleText');
+      if (icon) icon.textContent = isLight ? '☀️' : '🌙';
+      if (text) text.textContent = isLight ? '白天模式' : '夜晚模式';
+    }
+
+    const savedMacroTheme = localStorage.getItem(THEME_STORAGE_KEY) || 'dark';
+    applyMacroTheme(savedMacroTheme, false);
+
+    const macroThemeToggleBtn = document.getElementById('macroThemeToggleBtn');
+    if (macroThemeToggleBtn) {
+      macroThemeToggleBtn.addEventListener('click', () => {
+        const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+        applyMacroTheme(cur === 'light' ? 'dark' : 'light', true);
+      });
+    }
+
+    window.addEventListener('storage', (e) => {
+      if (e.key === THEME_STORAGE_KEY && e.newValue) {
+        applyMacroTheme(e.newValue, false);
+      }
+    });
 
     render();
     checkUpdateStatus();
