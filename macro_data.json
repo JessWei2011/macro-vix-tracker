@@ -1346,7 +1346,7 @@
     "vixtwn": 24.0,
     "vix": 14.12,
     "oil": 93.19,
-    "gold": 4429.8,
+    "gold": 4476.6,
     "us10y": 4.768,
     "us30y": 5.231,
     "spread": 2.66,
@@ -1450,6 +1450,62 @@
         "latestDate": "2026-09-04",
         "source": "xaus.com/api/v1/history",
         "updatedAt": "2026-09-05T23:56:14+08:00"
+      }
+    }
+  },
+  {
+    "date": "2026-09-06",
+    "vixtwn": 24.0,
+    "vix": 14.53,
+    "oil": 96.28,
+    "gold": 4476.6,
+    "us10y": 4.784,
+    "us30y": 5.246,
+    "spread": 2.65,
+    "dxy": 99.16,
+    "_meta": {
+      "vixtwn": {
+        "asof": "2026-09-04",
+        "fetchedAt": "2026-09-06T22:48:25+08:00"
+      },
+      "vix": {
+        "asof": "2026-09-04",
+        "fetchedAt": "2026-09-06T22:48:25+08:00"
+      },
+      "oil": {
+        "asof": "2026-09-04",
+        "fetchedAt": "2026-09-06T22:48:25+08:00"
+      },
+      "gold": {
+        "asof": "2026-09-04",
+        "fetchedAt": "2026-09-06T22:48:25+08:00"
+      },
+      "us10y": {
+        "asof": "2026-09-04",
+        "fetchedAt": "2026-09-06T22:48:25+08:00"
+      },
+      "us30y": {
+        "asof": "2026-09-04",
+        "fetchedAt": "2026-09-06T22:48:25+08:00"
+      },
+      "spread": {
+        "asof": "2026-09-03",
+        "fetchedAt": "2026-09-06T22:48:25+08:00"
+      },
+      "dxy": {
+        "asof": "2026-09-04",
+        "fetchedAt": "2026-09-06T22:48:25+08:00"
+      }
+    },
+    "_reports": {
+      "gold_spot": {
+        "name": "國際現貨黃金 XAU/USD",
+        "symbol": "XAUUSD=X",
+        "unit": "USD per troy ounce",
+        "latest": 4476.6,
+        "latestDate": "2026-09-04",
+        "source": "xaus.com/api/v1/history",
+        "updatedAt": "2026-09-06T22:48:25+08:00"
       }
     }
   }
