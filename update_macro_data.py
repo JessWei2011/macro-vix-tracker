@@ -11,6 +11,7 @@ if sys.stdout.encoding != "utf-8":
 
 DIR = Path(__file__).resolve().parent
 DATA_FILE = DIR / "macro_data.json"
+LIVE_FILE = DIR / "macro_live.json"
 UPDATE_STATUS_FILE = DIR / "macro_update_status.json"
 FIELDS = ("vixtwn", "vix", "oil", "gold", "us10y", "us30y", "spread", "dxy")
 
@@ -23,6 +24,63 @@ except ImportError:
 
 def now_iso():
     return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def check_indicator_status(key, asof, now=None):
+    """判斷指標資料是「盤中即時波動 (intraday)」還是「已確認收盤 (closed)」。
+    回傳 (is_closed: bool, session_label: str)
+    """
+    if now is None:
+        now = datetime.now()
+    today_str = now.date().isoformat()
+
+    # 1. 美國高收益債利差 (FRED)：官方公佈落後日定案值，永遠為已收盤
+    if key == "spread":
+        return True, "已收盤"
+
+    # 2. 台股恐慌指數 VIXTWN：交易時間平日 08:45 ~ 13:45
+    if key == "vixtwn":
+        if now.weekday() >= 5:
+            return True, "已收盤"
+        if asof and asof < today_str:
+            return True, "已收盤"
+        if (now.hour == 8 and now.minute >= 45) or (9 <= now.hour < 14):
+            return False, "盤中即時"
+        return True, "已收盤"
+
+    # 3. 現貨黃金 (gold)
+    if key == "gold":
+        if now.weekday() == 5 and now.hour >= 6:
+            return True, "已收盤"
+        if now.weekday() == 6:
+            return True, "已收盤"
+        if asof and asof < today_str:
+            return True, "已收盤"
+        if 5 <= now.hour < 7:
+            return True, "已收盤"
+        return False, "盤中即時"
+
+    # 4. 美國市場指標 (vix, us10y, us30y, dxy, oil)
+    if key in ("vix", "us10y", "us30y", "dxy", "oil"):
+        # 週末全天休市
+        if now.weekday() == 5 and now.hour >= 5:
+            return True, "已收盤"
+        if now.weekday() == 6:
+            return True, "已收盤"
+        if now.weekday() == 0 and now.hour < 21:
+            return True, "已收盤"
+        # 平日非美股盤中時段（台灣時間 05:30 ~ 21:00）：已收盤
+        if (now.hour > 5 or (now.hour == 5 and now.minute >= 30)) and now.hour < 21:
+            return True, "已收盤"
+        # 平日晚間至隔日清晨（美股盤中交易時段）
+        if asof == today_str:
+            return False, "盤中即時"
+        prev_day_str = (now.date() - timedelta(days=1)).isoformat()
+        if now.hour < 6 and asof == prev_day_str:
+            return False, "盤中即時"
+        return True, "已收盤"
+
+    return True, "已收盤"
 
 
 def read_update_status():
@@ -291,66 +349,125 @@ def main():
         )
         return 1
 
-    entry = next((e for e in entries if e["date"] == today), None)
-    if entry is None:
-        entry = {
-            "date": today, "vixtwn": None, "vix": None, "oil": None,
-            "gold": None, "us10y": None, "us30y": None, "spread": None, "dxy": None,
-        }
-        entries.append(entry)
+    now = datetime.now()
+    live_fields = {}
+    closed_fields = []
+    intraday_fields = []
+    for key in FIELDS:
+        val, asof = fetched.get(key, (None, None))
+        if val is not None:
+            is_closed, session_label = check_indicator_status(key, asof, now)
+            live_fields[key] = {
+                "value": val,
+                "asof": asof,
+                "isClosed": is_closed,
+                "session": session_label,
+                "fetchedAt": fetched_at,
+            }
+            if is_closed:
+                closed_fields.append(key)
+            else:
+                intraday_fields.append(key)
+        else:
+            live_fields[key] = {
+                "value": None,
+                "asof": None,
+                "isClosed": False,
+                "session": "無資料",
+                "fetchedAt": fetched_at,
+            }
 
-    # 以同一個正式日線來源回填已有資料日期，首次加入就能畫出完整走線圖。
+    # 1. 寫入即時資料檔 macro_live.json (包含盤中波動與最新報價)
+    live_payload = {
+        "updatedAt": fetched_at,
+        "fields": live_fields,
+    }
+    temp_live_file = LIVE_FILE.with_suffix(LIVE_FILE.suffix + ".tmp")
+    temp_live_file.write_text(json.dumps(live_payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    temp_live_file.replace(LIVE_FILE)
+
+    # 2. 歷史紀錄檔 macro_data.json：只有收盤後的數值才會正式寫入！盤中波動不覆蓋/不寫入
+    # 回填歷史黃金數據
     for historical_entry in entries:
         historical_date = historical_entry.get("date")
-        if historical_date in gold_history:
+        if historical_date in gold_history and historical_date != today:
             historical_entry["gold"] = gold_history[historical_date]
 
-    meta = entry.get("_meta", {})
-    for key, (val, asof) in fetched.items():
-        if val is not None:
-            entry[key] = val
-            meta[key] = {"asof": asof, "fetchedAt": fetched_at}
-    if meta:
-        entry["_meta"] = meta
+    # 將已收盤的指標更新或寫入對應 asof 日期的歷史紀錄
+    for key in closed_fields:
+        info = live_fields[key]
+        asof_date = info["asof"]
+        val = info["value"]
+        if not asof_date:
+            continue
 
-    # 供 JSON 使用者直接閱讀的現貨黃金報告；前端表格只使用 gold 數列與 _meta 的最新日期。
-    gold_value, gold_asof = fetched["gold"]
-    if gold_value is not None and gold_asof:
-        reports = entry.get("_reports", {})
-        reports["gold_spot"] = {
-            "name": "國際現貨黃金 XAU/USD",
-            "symbol": "XAUUSD=X",
-            "unit": "USD per troy ounce",
-            "latest": gold_value,
-            "latestDate": gold_asof,
-            "source": gold_source,
-            "updatedAt": fetched_at,
-        }
-        entry["_reports"] = reports
+        target_entry = next((e for e in entries if e.get("date") == asof_date), None)
+        if target_entry is None:
+            target_entry = {
+                "date": asof_date, "vixtwn": None, "vix": None, "oil": None,
+                "gold": None, "us10y": None, "us30y": None, "spread": None, "dxy": None,
+            }
+            entries.append(target_entry)
+
+        target_entry[key] = val
+        meta = target_entry.setdefault("_meta", {})
+        meta[key] = {"asof": asof_date, "fetchedAt": fetched_at, "status": "closed"}
+
+        # 若是黃金且已收盤，更新 report
+        if key == "gold" and gold_source:
+            reports = target_entry.setdefault("_reports", {})
+            reports["gold_spot"] = {
+                "name": "國際現貨黃金 XAU/USD",
+                "symbol": "XAUUSD=X",
+                "unit": "USD per troy ounce",
+                "latest": val,
+                "latestDate": asof_date,
+                "source": gold_source,
+                "updatedAt": fetched_at,
+            }
+
+    # 清理 entries 中屬於盤中波動或日期不符的欄位，確保歷史紀錄檔完全只留已收盤且日期對齊的資料
+    valid_entries = []
+    for entry in entries:
+        e_date = entry.get("date")
+        meta = entry.setdefault("_meta", {})
+        for key in list(FIELDS):
+            # 若欄位有 meta 記錄但 asof 與該列日期不符，予以清除
+            if key in meta and meta[key].get("asof") and meta[key].get("asof") != e_date:
+                entry[key] = None
+                del meta[key]
+            # 若為今天且該指標目前處於盤中，絕不留存在歷史檔
+            if e_date == today and key in live_fields and not live_fields[key]["isClosed"]:
+                entry[key] = None
+                if key in meta:
+                    del meta[key]
+        # 至少有一項有效收盤數值才保留該日期紀錄
+        if any(entry.get(k) is not None for k in FIELDS):
+            valid_entries.append(entry)
+
+    entries = valid_entries
 
     entries.sort(key=lambda e: e["date"])
     temp_data_file = DATA_FILE.with_suffix(DATA_FILE.suffix + ".tmp")
     temp_data_file.write_text(json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8")
     temp_data_file.replace(DATA_FILE)
 
-    now = datetime.now()
-    print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] {today} 更新欄位: {updated_fields or '(無新資料)'}")
-    for key, info in meta.items():
-        expected = get_expected_asof(key, now)
-        is_fresh = info["asof"] >= expected
-        status = "🟢 目前最新" if is_fresh else f"⚪ 尚未更新（預期應有 {expected}）"
-        print(f"  - {key}: 資料日期 {info['asof']} {status}")
+    print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] 總經更新完成:")
+    print(f"  - 已收盤正式記錄 ({len(closed_fields)}項): {closed_fields or '無'}")
+    print(f"  - 盤中即時波動 ({len(intraday_fields)}項): {intraday_fields or '無'}")
+    for key, info in live_fields.items():
+        if info['value'] is not None:
+            tag = '🟢 已收盤' if info['isClosed'] else '🟡 盤中波動'
+            print(f"    • {key}: {info['value']} ({info['asof']}) [{tag}]")
 
     is_complete = len(updated_fields) == len(FIELDS)
     state = "success" if is_complete else "partial"
-    if is_complete:
-        message = "八項總經資料（含現貨黃金）更新完成，已寫入本機資料檔。"
-    else:
-        message = f"已更新 {len(updated_fields)}/{len(FIELDS)} 項；其餘來源暫時無可用資料。"
+    message = f"總經數據更新完成：{len(closed_fields)} 項已收盤記錄，{len(intraday_fields)} 項盤中即時波動。"
 
     write_update_status(
         state, run_id, startedAt=started_at, finishedAt=now_iso(), phase="complete",
         message=message, updatedFields=updated_fields, failedFields=failed_fields,
+        closedFields=closed_fields, intradayFields=intraday_fields,
     )
     return 0 if is_complete else 2
 
