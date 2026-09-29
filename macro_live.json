@@ -1,61 +1,61 @@
 {
-  "updatedAt": "2026-09-29T07:01:04+08:00",
+  "updatedAt": "2026-09-29T18:07:15+08:00",
   "fields": {
     "vixtwn": {
-      "value": 23.12,
-      "asof": "2026-09-24",
+      "value": 24.6,
+      "asof": "2026-09-29",
       "isClosed": true,
       "session": "已收盤",
-      "fetchedAt": "2026-09-29T07:01:04+08:00"
+      "fetchedAt": "2026-09-29T18:07:15+08:00"
     },
     "vix": {
-      "value": 16.07,
-      "asof": "2026-09-28",
+      "value": 16.11,
+      "asof": "2026-09-29",
       "isClosed": true,
       "session": "已收盤",
-      "fetchedAt": "2026-09-29T07:01:04+08:00"
+      "fetchedAt": "2026-09-29T18:07:15+08:00"
     },
     "oil": {
-      "value": 98.67,
-      "asof": "2026-09-28",
+      "value": 97.52,
+      "asof": "2026-09-29",
       "isClosed": true,
       "session": "已收盤",
-      "fetchedAt": "2026-09-29T07:01:04+08:00"
+      "fetchedAt": "2026-09-29T18:07:15+08:00"
     },
     "gold": {
-      "value": 4167.1,
-      "asof": "2026-09-28",
-      "isClosed": true,
-      "session": "已收盤",
-      "fetchedAt": "2026-09-29T07:01:04+08:00"
+      "value": 4170.1,
+      "asof": "2026-09-29",
+      "isClosed": false,
+      "session": "盤中即時",
+      "fetchedAt": "2026-09-29T18:07:15+08:00"
     },
     "us10y": {
       "value": 5.24,
       "asof": "2026-09-28",
       "isClosed": true,
       "session": "已收盤",
-      "fetchedAt": "2026-09-29T07:01:04+08:00"
+      "fetchedAt": "2026-09-29T18:07:15+08:00"
     },
     "us30y": {
       "value": 5.561,
       "asof": "2026-09-28",
       "isClosed": true,
       "session": "已收盤",
-      "fetchedAt": "2026-09-29T07:01:04+08:00"
+      "fetchedAt": "2026-09-29T18:07:15+08:00"
     },
     "spread": {
       "value": 2.93,
       "asof": "2026-09-25",
       "isClosed": true,
       "session": "已收盤",
-      "fetchedAt": "2026-09-29T07:01:04+08:00"
+      "fetchedAt": "2026-09-29T18:07:15+08:00"
     },
     "dxy": {
-      "value": 101.18,
-      "asof": "2026-09-28",
+      "value": 101.46,
+      "asof": "2026-09-29",
       "isClosed": true,
       "session": "已收盤",
-      "fetchedAt": "2026-09-29T07:01:04+08:00"
+      "fetchedAt": "2026-09-29T18:07:15+08:00"
     }
   }
 }

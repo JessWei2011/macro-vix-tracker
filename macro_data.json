@@ -1510,7 +1510,7 @@
     "_meta": {
       "vixtwn": {
         "asof": "2026-09-24",
-        "fetchedAt": "2026-09-29T07:01:04+08:00",
+        "fetchedAt": "2026-09-29T10:45:04+08:00",
         "status": "closed"
       },
       "vix": {
@@ -1583,7 +1583,7 @@
       },
       "spread": {
         "asof": "2026-09-25",
-        "fetchedAt": "2026-09-29T07:01:04+08:00",
+        "fetchedAt": "2026-09-29T18:07:15+08:00",
         "status": "closed"
       },
       "dxy": {
@@ -1607,41 +1607,41 @@
     "date": "2026-09-28",
     "vixtwn": null,
     "vix": 16.07,
-    "oil": 98.67,
-    "gold": 4167.1,
+    "oil": 99.23,
+    "gold": 4168.4,
     "us10y": 5.24,
     "us30y": 5.561,
     "spread": null,
-    "dxy": 101.18,
+    "dxy": 101.2,
     "_meta": {
       "gold": {
         "asof": "2026-09-28",
-        "fetchedAt": "2026-09-29T07:01:04+08:00",
+        "fetchedAt": "2026-09-29T10:45:04+08:00",
         "status": "closed"
       },
       "vix": {
         "asof": "2026-09-28",
-        "fetchedAt": "2026-09-29T07:01:04+08:00",
+        "fetchedAt": "2026-09-29T10:45:04+08:00",
         "status": "closed"
       },
       "oil": {
         "asof": "2026-09-28",
-        "fetchedAt": "2026-09-29T07:01:04+08:00",
+        "fetchedAt": "2026-09-29T10:45:04+08:00",
         "status": "closed"
       },
       "us10y": {
         "asof": "2026-09-28",
-        "fetchedAt": "2026-09-29T07:01:04+08:00",
+        "fetchedAt": "2026-09-29T18:07:15+08:00",
         "status": "closed"
       },
       "us30y": {
         "asof": "2026-09-28",
-        "fetchedAt": "2026-09-29T07:01:04+08:00",
+        "fetchedAt": "2026-09-29T18:07:15+08:00",
         "status": "closed"
       },
       "dxy": {
         "asof": "2026-09-28",
-        "fetchedAt": "2026-09-29T07:01:04+08:00",
+        "fetchedAt": "2026-09-29T10:45:04+08:00",
         "status": "closed"
       }
     },
@@ -1650,10 +1650,43 @@
         "name": "國際現貨黃金 XAU/USD",
         "symbol": "XAUUSD=X",
         "unit": "USD per troy ounce",
-        "latest": 4167.1,
+        "latest": 4159.4,
         "latestDate": "2026-09-28",
         "source": "xaus.com/api/v1/history",
-        "updatedAt": "2026-09-29T07:01:04+08:00"
+        "updatedAt": "2026-09-29T10:45:04+08:00"
+      }
+    }
+  },
+  {
+    "date": "2026-09-29",
+    "vixtwn": 24.6,
+    "vix": 16.11,
+    "oil": 97.52,
+    "gold": null,
+    "us10y": null,
+    "us30y": null,
+    "spread": null,
+    "dxy": 101.46,
+    "_meta": {
+      "vixtwn": {
+        "asof": "2026-09-29",
+        "fetchedAt": "2026-09-29T18:07:15+08:00",
+        "status": "closed"
+      },
+      "vix": {
+        "asof": "2026-09-29",
+        "fetchedAt": "2026-09-29T18:07:15+08:00",
+        "status": "closed"
+      },
+      "oil": {
+        "asof": "2026-09-29",
+        "fetchedAt": "2026-09-29T18:07:15+08:00",
+        "status": "closed"
+      },
+      "dxy": {
+        "asof": "2026-09-29",
+        "fetchedAt": "2026-09-29T18:07:15+08:00",
+        "status": "closed"
       }
     }
   }

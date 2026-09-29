@@ -1283,8 +1283,16 @@
         PAD_Y + (H - PAD_Y * 2) * (1 - (v - min) / range),
       ]);
 
-      const isFlat = points[points.length - 1] === points[0];
-      const isUp = points[points.length - 1] > points[0];
+      const lastP = points[points.length - 1];
+      let prevP = points[points.length - 2];
+      for (let i = points.length - 2; i >= 0; i--) {
+        if (Math.abs(points[i] - lastP) >= 0.0001) {
+          prevP = points[i];
+          break;
+        }
+      }
+      const isFlat = Math.abs(lastP - prevP) < 0.0001;
+      const isUp = lastP > prevP;
       const color = isFlat ? '#8892a0' : (isUp ? '#ff4d4d' : '#00e676');
 
       const linePoints = xy.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
@@ -1310,10 +1318,25 @@
       const asc = [...entries].sort((a, b) => a.date.localeCompare(b.date)).slice(-14);
 
       fields.forEach(key => {
-        const points = asc
-          .map(e => e[key])
-          .filter(v => v !== null && v !== undefined && v !== '' && !isNaN(v))
-          .map(v => parseFloat(v));
+        let firstVal = null;
+        for (const entry of asc) {
+          const raw = entry?.[key];
+          if (raw !== null && raw !== undefined && raw !== '' && !isNaN(raw)) {
+            firstVal = parseFloat(raw);
+            break;
+          }
+        }
+        let points = [];
+        if (firstVal !== null) {
+          let currentVal = firstVal;
+          points = asc.map(entry => {
+            const raw = entry?.[key];
+            if (raw !== null && raw !== undefined && raw !== '' && !isNaN(raw)) {
+              currentVal = parseFloat(raw);
+            }
+            return currentVal;
+          });
+        }
         const el = document.getElementById(`spark-${key}`);
         if (el) el.innerHTML = buildSparklineSVG(points);
       });
