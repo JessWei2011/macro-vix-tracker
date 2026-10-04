@@ -1,61 +1,61 @@
 {
-  "updatedAt": "2026-09-29T18:07:15+08:00",
+  "updatedAt": "2026-10-04T22:02:53+08:00",
   "fields": {
     "vixtwn": {
-      "value": 24.6,
-      "asof": "2026-09-29",
+      "value": 21.89,
+      "asof": "2026-10-02",
       "isClosed": true,
       "session": "已收盤",
-      "fetchedAt": "2026-09-29T18:07:15+08:00"
+      "fetchedAt": "2026-10-04T22:02:53+08:00"
     },
     "vix": {
-      "value": 16.11,
-      "asof": "2026-09-29",
+      "value": 15.31,
+      "asof": "2026-10-02",
       "isClosed": true,
       "session": "已收盤",
-      "fetchedAt": "2026-09-29T18:07:15+08:00"
+      "fetchedAt": "2026-10-04T22:02:53+08:00"
     },
     "oil": {
-      "value": 97.52,
-      "asof": "2026-09-29",
+      "value": 102.25,
+      "asof": "2026-10-02",
       "isClosed": true,
       "session": "已收盤",
-      "fetchedAt": "2026-09-29T18:07:15+08:00"
+      "fetchedAt": "2026-10-04T22:02:53+08:00"
     },
     "gold": {
-      "value": 4170.1,
-      "asof": "2026-09-29",
-      "isClosed": false,
-      "session": "盤中即時",
-      "fetchedAt": "2026-09-29T18:07:15+08:00"
+      "value": 4162.3,
+      "asof": "2026-10-02",
+      "isClosed": true,
+      "session": "已收盤",
+      "fetchedAt": "2026-10-04T22:02:53+08:00"
     },
     "us10y": {
-      "value": 5.24,
-      "asof": "2026-09-28",
+      "value": 5.277,
+      "asof": "2026-10-02",
       "isClosed": true,
       "session": "已收盤",
-      "fetchedAt": "2026-09-29T18:07:15+08:00"
+      "fetchedAt": "2026-10-04T22:02:53+08:00"
     },
     "us30y": {
-      "value": 5.561,
-      "asof": "2026-09-28",
+      "value": 5.63,
+      "asof": "2026-10-02",
       "isClosed": true,
       "session": "已收盤",
-      "fetchedAt": "2026-09-29T18:07:15+08:00"
+      "fetchedAt": "2026-10-04T22:02:53+08:00"
     },
     "spread": {
-      "value": 2.93,
-      "asof": "2026-09-25",
+      "value": 3.24,
+      "asof": "2026-10-01",
       "isClosed": true,
       "session": "已收盤",
-      "fetchedAt": "2026-09-29T18:07:15+08:00"
+      "fetchedAt": "2026-10-04T22:02:53+08:00"
     },
     "dxy": {
-      "value": 101.46,
-      "asof": "2026-09-29",
+      "value": 101.93,
+      "asof": "2026-10-02",
       "isClosed": true,
       "session": "已收盤",
-      "fetchedAt": "2026-09-29T18:07:15+08:00"
+      "fetchedAt": "2026-10-04T22:02:53+08:00"
     }
   }
 }

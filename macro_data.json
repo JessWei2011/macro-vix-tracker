@@ -1583,7 +1583,7 @@
       },
       "spread": {
         "asof": "2026-09-25",
-        "fetchedAt": "2026-09-29T18:07:15+08:00",
+        "fetchedAt": "2026-09-29T22:19:16+08:00",
         "status": "closed"
       },
       "dxy": {
@@ -1611,7 +1611,7 @@
     "gold": 4168.4,
     "us10y": 5.24,
     "us30y": 5.561,
-    "spread": null,
+    "spread": 3.02,
     "dxy": 101.2,
     "_meta": {
       "gold": {
@@ -1643,6 +1643,11 @@
         "asof": "2026-09-28",
         "fetchedAt": "2026-09-29T10:45:04+08:00",
         "status": "closed"
+      },
+      "spread": {
+        "asof": "2026-09-28",
+        "fetchedAt": "2026-09-30T22:25:44+08:00",
+        "status": "closed"
       }
     },
     "_reports": {
@@ -1660,33 +1665,251 @@
   {
     "date": "2026-09-29",
     "vixtwn": 24.6,
-    "vix": 16.11,
-    "oil": 97.52,
-    "gold": null,
-    "us10y": null,
-    "us30y": null,
-    "spread": null,
-    "dxy": 101.46,
+    "vix": 16.04,
+    "oil": 96.42,
+    "gold": 4179.7,
+    "us10y": 5.255,
+    "us30y": 5.594,
+    "spread": 3.08,
+    "dxy": 101.34,
     "_meta": {
       "vixtwn": {
         "asof": "2026-09-29",
-        "fetchedAt": "2026-09-29T18:07:15+08:00",
+        "fetchedAt": "2026-09-30T11:13:12+08:00",
         "status": "closed"
       },
       "vix": {
         "asof": "2026-09-29",
-        "fetchedAt": "2026-09-29T18:07:15+08:00",
+        "fetchedAt": "2026-09-30T11:13:12+08:00",
         "status": "closed"
       },
       "oil": {
         "asof": "2026-09-29",
-        "fetchedAt": "2026-09-29T18:07:15+08:00",
+        "fetchedAt": "2026-09-30T11:13:12+08:00",
+        "status": "closed"
+      },
+      "gold": {
+        "asof": "2026-09-29",
+        "fetchedAt": "2026-09-30T11:13:12+08:00",
+        "status": "closed"
+      },
+      "us10y": {
+        "asof": "2026-09-29",
+        "fetchedAt": "2026-09-30T11:13:12+08:00",
+        "status": "closed"
+      },
+      "us30y": {
+        "asof": "2026-09-29",
+        "fetchedAt": "2026-09-30T11:13:12+08:00",
         "status": "closed"
       },
       "dxy": {
         "asof": "2026-09-29",
-        "fetchedAt": "2026-09-29T18:07:15+08:00",
+        "fetchedAt": "2026-09-30T11:13:12+08:00",
         "status": "closed"
+      },
+      "spread": {
+        "asof": "2026-09-29",
+        "fetchedAt": "2026-10-01T21:11:22+08:00",
+        "status": "closed"
+      }
+    },
+    "_reports": {
+      "gold_spot": {
+        "name": "國際現貨黃金 XAU/USD",
+        "symbol": "XAUUSD=X",
+        "unit": "USD per troy ounce",
+        "latest": 4212.6,
+        "latestDate": "2026-09-29",
+        "source": "xaus.com/api/v1/history",
+        "updatedAt": "2026-09-30T11:13:12+08:00"
+      }
+    }
+  },
+  {
+    "date": "2026-09-30",
+    "vixtwn": 23.04,
+    "vix": 16.34,
+    "oil": 97.45,
+    "gold": 4186.7,
+    "us10y": 5.293,
+    "us30y": 5.638,
+    "spread": 3.12,
+    "dxy": 101.59,
+    "_meta": {
+      "vixtwn": {
+        "asof": "2026-09-30",
+        "fetchedAt": "2026-09-30T23:48:41+08:00",
+        "status": "closed"
+      },
+      "gold": {
+        "asof": "2026-09-30",
+        "fetchedAt": "2026-10-01T00:17:14+08:00",
+        "status": "closed"
+      },
+      "vix": {
+        "asof": "2026-09-30",
+        "fetchedAt": "2026-10-01T15:20:59+08:00",
+        "status": "closed"
+      },
+      "oil": {
+        "asof": "2026-09-30",
+        "fetchedAt": "2026-10-01T11:16:06+08:00",
+        "status": "closed"
+      },
+      "us10y": {
+        "asof": "2026-09-30",
+        "fetchedAt": "2026-10-01T17:17:31+08:00",
+        "status": "closed"
+      },
+      "us30y": {
+        "asof": "2026-09-30",
+        "fetchedAt": "2026-10-01T17:17:31+08:00",
+        "status": "closed"
+      },
+      "dxy": {
+        "asof": "2026-09-30",
+        "fetchedAt": "2026-10-01T11:16:06+08:00",
+        "status": "closed"
+      },
+      "spread": {
+        "asof": "2026-09-30",
+        "fetchedAt": "2026-10-02T21:51:46+08:00",
+        "status": "closed"
+      }
+    },
+    "_reports": {
+      "gold_spot": {
+        "name": "國際現貨黃金 XAU/USD",
+        "symbol": "XAUUSD=X",
+        "unit": "USD per troy ounce",
+        "latest": 4213.2,
+        "latestDate": "2026-09-30",
+        "source": "xaus.com/api/v1/history",
+        "updatedAt": "2026-10-01T00:17:14+08:00"
+      }
+    }
+  },
+  {
+    "date": "2026-10-01",
+    "vixtwn": 22.43,
+    "vix": 16.39,
+    "oil": 102.21,
+    "gold": 4202.3,
+    "us10y": 5.237,
+    "us30y": 5.603,
+    "spread": 3.24,
+    "dxy": 101.95,
+    "_meta": {
+      "vixtwn": {
+        "asof": "2026-10-01",
+        "fetchedAt": "2026-10-02T14:17:51+08:00",
+        "status": "closed"
+      },
+      "vix": {
+        "asof": "2026-10-01",
+        "fetchedAt": "2026-10-02T14:17:51+08:00",
+        "status": "closed"
+      },
+      "oil": {
+        "asof": "2026-10-01",
+        "fetchedAt": "2026-10-02T11:44:39+08:00",
+        "status": "closed"
+      },
+      "gold": {
+        "asof": "2026-10-01",
+        "fetchedAt": "2026-10-02T13:43:06+08:00",
+        "status": "closed"
+      },
+      "us10y": {
+        "asof": "2026-10-01",
+        "fetchedAt": "2026-10-02T17:55:07+08:00",
+        "status": "closed"
+      },
+      "us30y": {
+        "asof": "2026-10-01",
+        "fetchedAt": "2026-10-02T17:55:07+08:00",
+        "status": "closed"
+      },
+      "dxy": {
+        "asof": "2026-10-01",
+        "fetchedAt": "2026-10-02T11:44:39+08:00",
+        "status": "closed"
+      },
+      "spread": {
+        "asof": "2026-10-01",
+        "fetchedAt": "2026-10-04T22:02:53+08:00",
+        "status": "closed"
+      }
+    },
+    "_reports": {
+      "gold_spot": {
+        "name": "國際現貨黃金 XAU/USD",
+        "symbol": "XAUUSD=X",
+        "unit": "USD per troy ounce",
+        "latest": 4207.7,
+        "latestDate": "2026-10-01",
+        "source": "xaus.com/api/v1/history",
+        "updatedAt": "2026-10-02T13:43:06+08:00"
+      }
+    }
+  },
+  {
+    "date": "2026-10-02",
+    "vixtwn": 21.89,
+    "vix": 15.31,
+    "oil": 102.25,
+    "gold": 4162.3,
+    "us10y": 5.277,
+    "us30y": 5.63,
+    "spread": null,
+    "dxy": 101.93,
+    "_meta": {
+      "vixtwn": {
+        "asof": "2026-10-02",
+        "fetchedAt": "2026-10-04T22:02:53+08:00",
+        "status": "closed"
+      },
+      "gold": {
+        "asof": "2026-10-02",
+        "fetchedAt": "2026-10-04T22:02:53+08:00",
+        "status": "closed"
+      },
+      "vix": {
+        "asof": "2026-10-02",
+        "fetchedAt": "2026-10-04T22:02:53+08:00",
+        "status": "closed"
+      },
+      "oil": {
+        "asof": "2026-10-02",
+        "fetchedAt": "2026-10-04T22:02:53+08:00",
+        "status": "closed"
+      },
+      "us10y": {
+        "asof": "2026-10-02",
+        "fetchedAt": "2026-10-04T22:02:53+08:00",
+        "status": "closed"
+      },
+      "us30y": {
+        "asof": "2026-10-02",
+        "fetchedAt": "2026-10-04T22:02:53+08:00",
+        "status": "closed"
+      },
+      "dxy": {
+        "asof": "2026-10-02",
+        "fetchedAt": "2026-10-04T22:02:53+08:00",
+        "status": "closed"
+      }
+    },
+    "_reports": {
+      "gold_spot": {
+        "name": "國際現貨黃金 XAU/USD",
+        "symbol": "XAUUSD=X",
+        "unit": "USD per troy ounce",
+        "latest": 4162.3,
+        "latestDate": "2026-10-02",
+        "source": "xaus.com/api/v1/history",
+        "updatedAt": "2026-10-04T22:02:53+08:00"
       }
     }
   }
