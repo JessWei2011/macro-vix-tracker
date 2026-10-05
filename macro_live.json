@@ -1,61 +1,61 @@
 {
-  "updatedAt": "2026-10-04T22:02:53+08:00",
+  "updatedAt": "2026-10-05T09:47:10+08:00",
   "fields": {
     "vixtwn": {
       "value": 21.89,
       "asof": "2026-10-02",
       "isClosed": true,
       "session": "已收盤",
-      "fetchedAt": "2026-10-04T22:02:53+08:00"
+      "fetchedAt": "2026-10-05T09:47:10+08:00"
     },
     "vix": {
       "value": 15.31,
       "asof": "2026-10-02",
       "isClosed": true,
       "session": "已收盤",
-      "fetchedAt": "2026-10-04T22:02:53+08:00"
+      "fetchedAt": "2026-10-05T09:47:10+08:00"
     },
     "oil": {
-      "value": 102.25,
-      "asof": "2026-10-02",
+      "value": 101.72,
+      "asof": "2026-10-04",
       "isClosed": true,
       "session": "已收盤",
-      "fetchedAt": "2026-10-04T22:02:53+08:00"
+      "fetchedAt": "2026-10-05T09:47:10+08:00"
     },
     "gold": {
-      "value": 4162.3,
-      "asof": "2026-10-02",
+      "value": 4169.6,
+      "asof": "2026-10-04",
       "isClosed": true,
       "session": "已收盤",
-      "fetchedAt": "2026-10-04T22:02:53+08:00"
+      "fetchedAt": "2026-10-05T09:47:10+08:00"
     },
     "us10y": {
       "value": 5.277,
       "asof": "2026-10-02",
       "isClosed": true,
       "session": "已收盤",
-      "fetchedAt": "2026-10-04T22:02:53+08:00"
+      "fetchedAt": "2026-10-05T09:47:10+08:00"
     },
     "us30y": {
       "value": 5.63,
       "asof": "2026-10-02",
       "isClosed": true,
       "session": "已收盤",
-      "fetchedAt": "2026-10-04T22:02:53+08:00"
+      "fetchedAt": "2026-10-05T09:47:10+08:00"
     },
     "spread": {
       "value": 3.24,
       "asof": "2026-10-01",
       "isClosed": true,
       "session": "已收盤",
-      "fetchedAt": "2026-10-04T22:02:53+08:00"
+      "fetchedAt": "2026-10-05T09:47:10+08:00"
     },
     "dxy": {
-      "value": 101.93,
-      "asof": "2026-10-02",
+      "value": 102.0,
+      "asof": "2026-10-04",
       "isClosed": true,
       "session": "已收盤",
-      "fetchedAt": "2026-10-04T22:02:53+08:00"
+      "fetchedAt": "2026-10-05T09:47:10+08:00"
     }
   }
 }

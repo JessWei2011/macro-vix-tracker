@@ -1838,7 +1838,7 @@
       },
       "spread": {
         "asof": "2026-10-01",
-        "fetchedAt": "2026-10-04T22:02:53+08:00",
+        "fetchedAt": "2026-10-05T09:47:10+08:00",
         "status": "closed"
       }
     },
@@ -1867,7 +1867,7 @@
     "_meta": {
       "vixtwn": {
         "asof": "2026-10-02",
-        "fetchedAt": "2026-10-04T22:02:53+08:00",
+        "fetchedAt": "2026-10-05T09:47:10+08:00",
         "status": "closed"
       },
       "gold": {
@@ -1877,7 +1877,7 @@
       },
       "vix": {
         "asof": "2026-10-02",
-        "fetchedAt": "2026-10-04T22:02:53+08:00",
+        "fetchedAt": "2026-10-05T09:47:10+08:00",
         "status": "closed"
       },
       "oil": {
@@ -1887,12 +1887,12 @@
       },
       "us10y": {
         "asof": "2026-10-02",
-        "fetchedAt": "2026-10-04T22:02:53+08:00",
+        "fetchedAt": "2026-10-05T09:47:10+08:00",
         "status": "closed"
       },
       "us30y": {
         "asof": "2026-10-02",
-        "fetchedAt": "2026-10-04T22:02:53+08:00",
+        "fetchedAt": "2026-10-05T09:47:10+08:00",
         "status": "closed"
       },
       "dxy": {
@@ -1910,6 +1910,45 @@
         "latestDate": "2026-10-02",
         "source": "xaus.com/api/v1/history",
         "updatedAt": "2026-10-04T22:02:53+08:00"
+      }
+    }
+  },
+  {
+    "date": "2026-10-04",
+    "vixtwn": null,
+    "vix": null,
+    "oil": 101.72,
+    "gold": 4169.6,
+    "us10y": null,
+    "us30y": null,
+    "spread": null,
+    "dxy": 102.0,
+    "_meta": {
+      "oil": {
+        "asof": "2026-10-04",
+        "fetchedAt": "2026-10-05T09:47:10+08:00",
+        "status": "closed"
+      },
+      "gold": {
+        "asof": "2026-10-04",
+        "fetchedAt": "2026-10-05T09:47:10+08:00",
+        "status": "closed"
+      },
+      "dxy": {
+        "asof": "2026-10-04",
+        "fetchedAt": "2026-10-05T09:47:10+08:00",
+        "status": "closed"
+      }
+    },
+    "_reports": {
+      "gold_spot": {
+        "name": "國際現貨黃金 XAU/USD",
+        "symbol": "XAUUSD=X",
+        "unit": "USD per troy ounce",
+        "latest": 4169.6,
+        "latestDate": "2026-10-04",
+        "source": "xaus.com/api/v1/history",
+        "updatedAt": "2026-10-05T09:47:10+08:00"
       }
     }
   }
